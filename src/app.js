@@ -122,7 +122,7 @@ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_$
 }
 
 // --- State -------------------------------------------------------------------
-let subs = loadSubscriptions();    // {id, name, amount:Number, cycle:String, active:Boolean}
+let subs = [];    // {id, name, amount:Number, cycle:String, active:Boolean}
 let formOpen = false;             // Panel-Status
 
 // --- DOM Refs ----------------------------------------------------------------
@@ -153,12 +153,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // zuerst aus Storage laden
     subs = loadSubscriptions();
 
-    // dann UI initialisieren + einmal rendern
+    // dann UI initialisieren
     init();
+
+    // und einmal vollständig rendern
+    render();
 });
 
+
 function init() {
-    render();
     // cycle options
     cycleSelect.innerHTML = cycles
         .map(c => `<option value="${c.value}">${c.label}</option>`)
@@ -166,9 +169,6 @@ function init() {
 
     // Theme initialisieren
     initTheme();
-
-    // aus Speicher laden (zur sicherheit nochmal)
-    subs = loadSubscriptions();
 
     // events
     fab.addEventListener("click", () => {
@@ -226,8 +226,8 @@ function init() {
         const action = btn.dataset.menuAction;
         handleMenuAction(action);
     });
-
 }
+
 
 
 // --- Rendering ---------------------------------------------------------------
@@ -321,10 +321,15 @@ function startEdit(id) {
 }
 
 function removeSub(id) {
-    subs = subs.filter(s => s.id !== id);
     const confirmed = window.confirm(
         "Dieses Abo löschen? Diese Aktion kann nicht rückgängig gemacht werden."
     );
+
+    if (!confirmed) {
+        return;
+    }
+
+    subs = subs.filter(s => s.id !== id);
     // falls gerade editiert wird -> Formular zurücksetzen
     if (formId.value === id)
     resetForm();
@@ -341,7 +346,6 @@ function clearAllSubscriptions() {
     }
 
     subs = [];
-    saveSubscriptions(subs);
     render();
 }
 
@@ -389,7 +393,6 @@ function handleMenuAction(action) {
 
     // Nach Aktion Menü schließen
     openMenu(false);
-    render();
 }
 
 
