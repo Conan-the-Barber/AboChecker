@@ -124,6 +124,7 @@ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_$
 // --- State -------------------------------------------------------------------
 let subs = [];    // {id, name, amount:Number, cycle:String, active:Boolean}
 let formOpen = false;             // Panel-Status
+let formMode = "new"; // "new" | "view" | "edit"
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel      = document.getElementById("panel");
@@ -142,6 +143,8 @@ const cycleSelect= document.getElementById("cycle");
 const activeChk  = document.getElementById("active");
 const submitBtn  = document.getElementById("submitBtn");
 const cancelBtn  = document.getElementById("cancelBtn");
+const deleteBtn  = document.getElementById("deleteBtn");
+const editBtn    = document.getElementById("editBtn");
 
 const menuBtn       = document.getElementById("menuBtn");
 const menu          = document.getElementById("menu");
@@ -172,7 +175,8 @@ function init() {
 
     // events
     fab.addEventListener("click", () => {
-        resetForm();
+        resetForm();           // macht Felder leer
+        setFormMode("new");    // NEW: Speichern + Abbrechen
         openForm(true);
     });
 
@@ -183,20 +187,40 @@ function init() {
 
     form.addEventListener("submit", onSubmit);
 
-    // Delegation für List-Buttons
-    listEl.addEventListener("click", (e) => {
-        const btn = e.target.closest("button[data-action]");
-        if (!btn) return;
-        const id = btn.dataset.id;
-
-        switch (btn.dataset.action) {
-            case "edit":
-                startEdit(id);
-                break;
-            case "del":
-                removeSub(id);
-                break;
+    editBtn.addEventListener("click", () => {
+        if (!formId.value) {
+            return;
         }
+        setFormMode("edit");
+    });
+
+    deleteBtn.addEventListener("click", () => {
+        const id = formId.value;
+        if (!id) {
+            return;
+        }
+        removeSub(id);
+        openForm(false);
+    });
+
+    // Klick auf Zeile öffnet das Panel (außer Checkbox)
+    listEl.addEventListener("click", (e) => {
+        // Klick auf Checkbox ignorieren (wird von change-Handler behandelt)
+        const chk = e.target.closest('input[type="checkbox"][data-id]');
+        if (chk) {
+            return;
+        }
+
+        const row = e.target.closest("li.row");
+        if (!row) {
+            return;
+        }
+
+        const id = row.dataset.id;
+        if (!id) {
+            return;
+        }
+        startEdit(id);
     });
 
     // Delegation für Aktiv-Checkboxen
@@ -244,27 +268,23 @@ function render() {
                 const perMonth = money(toMonthly(s.amount, s.cycle));
                 const debitLabel = s.debit === "manual" ? "manuell" : "automatisch";
 
-                return `
-                    <li class="row">
-                        <div class="row__title">
-                            <div class="name">${escapeHTML(s.name)}</div>
-                            <div class="sub">${money(s.amount)} · ${cycleLabel}</div>
-                        </div>
+            return `
+                <li class="row" data-id="${s.id}">
+                    <div class="row__title">
+                        <div class="name">${escapeHTML(s.name)}</div>
+                        <div class="sub">${money(s.amount)} · ${cycleLabel}</div>
+                    </div>
 
-                        <div class="hide-sm">${escapeHTML(debitLabel || "-")}</div>
-                        <div class="hide-sm">${cycleLabel}</div>
-                        <div class="right strong">${perMonth}</div>
+                    <div class="hide-sm">${escapeHTML(debitLabel || "-")}</div>
+                    <div class="hide-sm">${cycleLabel}</div>
+                    <div class="right strong">${perMonth}</div>
 
-                        <div class="center">
-                            <input type="checkbox" data-id="${s.id}" ${s.active ? "checked" : ""} />
-                        </div>
+                    <div class="center">
+                        <input type="checkbox" data-id="${s.id}" ${s.active ? "checked" : ""} />
+                    </div>
+                </li>
+            `;
 
-                        <div class="right row__actions">
-                            <button class="btn" data-action="edit" data-id="${s.id}">Bearb.</button>
-                            <button class="btn btn--danger" data-action="del" data-id="${s.id}">Löschen</button>
-                        </div>
-                    </li>
-                `;
             })
             .join("");
     }
@@ -307,7 +327,85 @@ function onSubmit(e) {
     render();
 }
 
+function setFormMode(mode) {
+    formMode = mode;
+
+    const isView = mode === "view";
+    const isNew  = mode === "new";
+    const isEdit = mode === "edit";
+
+    // alle Eingabefelder im Formular holen
+    const controls = form.querySelectorAll("input, select, textarea");
+
+    controls.forEach((el) => {
+        if (el === formId) {
+            return; // ID bleibt immer bearbeitbar für JS
+        }
+
+        if (isView) {
+            el.setAttribute("disabled", "disabled");
+        } else {
+            el.removeAttribute("disabled");
+        }
+    });
+
+    // Buttons:
+    // VIEW: Bearbeiten + Abbrechen
+    if (isView) {
+        editBtn.style.display    = "";
+        submitBtn.style.display  = "none";
+        deleteBtn.style.display  = "none"; // Löschen erst im Edit-Mode
+        cancelBtn.style.display  = "";
+    }
+
+    // NEW: Speichern + Abbrechen
+    if (isNew) {
+        editBtn.style.display    = "none";
+        submitBtn.style.display  = "";
+        submitBtn.textContent    = "Speichern";
+        deleteBtn.style.display  = "none";
+        cancelBtn.style.display  = "";
+    }
+
+    // EDIT: Speichern + Löschen + Abbrechen
+    if (isEdit) {
+        editBtn.style.display    = "none";
+        submitBtn.style.display  = "";
+        submitBtn.textContent    = "Speichern";
+        deleteBtn.style.display  = "";
+        cancelBtn.style.display  = "";
+    }
+}
+
+// edit-Modus: Formular mit Werten füllen/bearbeiten
 function startEdit(id) {
+    const s = subs.find((x) => x.id === id);
+    if (!s) {
+        return;
+    }
+
+    formId.value      = s.id;
+    nameInput.value   = s.name;
+    debitSelect.value = s.debit || "auto";
+    amountInput.value = String(s.amount);
+    cycleSelect.value = s.cycle;
+    activeChk.checked = !!s.active;
+
+    setFormMode("view");
+    openForm(true);
+}
+
+function resetForm() {
+    form.reset();
+    formId.value = "";
+    debitSelect.value = "auto";
+    cycleSelect.value = "monthly";
+    activeChk.checked = true;
+    setFormMode("new");
+}
+
+/* // View-Modus: Formular nur zum Ansehen, Bearbeiten über Button
+function startView(id) {
     const s = subs.find(x => x.id === id);
     if (!s) return;
     formId.value = s.id;
@@ -316,9 +414,9 @@ function startEdit(id) {
     amountInput.value = String(s.amount);
     cycleSelect.value = s.cycle;
     activeChk.checked = !!s.active;
-    submitBtn.textContent = "Speichern";
+    editBtn.textContent = "Bearbeiten";
     openForm(true);
-}
+} */
 
 function removeSub(id) {
     const confirmed = window.confirm(
@@ -329,10 +427,13 @@ function removeSub(id) {
         return;
     }
 
-    subs = subs.filter(s => s.id !== id);
+    subs = subs.filter((s) => s.id !== id);
+
     // falls gerade editiert wird -> Formular zurücksetzen
-    if (formId.value === id)
-    resetForm();
+    if (formId.value === id) {
+        resetForm();
+    }
+
     render();
 }
 
@@ -352,15 +453,6 @@ function clearAllSubscriptions() {
 function toggleActive(id, value) {
     subs = subs.map(s => (s.id === id ? { ...s, active: !!value } : s));
     render();
-}
-
-function resetForm() {
-    form.reset();
-    formId.value = "";
-    debitSelect.value = "auto";
-    cycleSelect.value = "monthly";
-    activeChk.checked = true;
-    submitBtn.textContent = "Hinzufügen";
 }
 
 function openForm(open) {
