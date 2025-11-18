@@ -23,10 +23,16 @@
                   Darkmode umschalten
               </button>
           </li>
-
-          <!-- Platzhalter für später:
-          <li><button class="menu__item" data-menu-action="language">Sprache</button></li>
-          -->
+          <li class="menu__group">
+              <div class="menu__label">Gesamt anzeigen als</div>
+              <select id="displaySelect" class="menu__select">
+                  <option value="monthly">pro Monat</option>
+                  <option value="yearly">pro Jahr</option>
+                  <option value="weekly">pro Woche</option>
+                  <option value="quarterly">pro Quartal</option>
+                  <option value="daily">pro Tag</option>
+              </select>
+          </li>
       </ul>
   </nav>
 
@@ -34,7 +40,10 @@
     <div class="app" id="app">
       <header class="app__header">
         <h1>Abo Checker</h1>
-        <div class="app__total">Monatskosten aktiv: <b id="totalTop">€ 0,00</b></div>
+        <div class="app__total">
+          <span id="totalLabel">Monatskosten aktiv:</span>
+          <b id="totalTop">€ 0,00</b>
+        </div>
         <button id="menuBtn" class="menu-btn" aria-label="Menü öffnen">
         ☰
         </button>
@@ -135,11 +144,11 @@
       <!-- Liste -->
       <div class="card">
         <div class="list__head">
-          <div>Abo</div>
-          <div>Abbuchung</div>
-          <div>Zahlungsweise</div>
-          <div class="right">€/Monat</div>
-          <div class="center">Aktiv</div>
+            <div>Abo</div>
+            <div>Abbuchung</div>
+            <div>Zahlungsweise</div>
+            <div class="right" id="amountHeader">€/Monat</div>
+            <div class="center">Aktiv</div>
         </div>
 
         <div id="empty" class="empty">Noch keine Abos hinzugefügt.</div>
@@ -148,9 +157,10 @@
 
       <!-- Sticky-Bottom -->
       <div class="stickybar">
-        <div>Gesamt (aktive)</div>
-        <div class="strong" id="totalBottom">€ 0,00</div>
+          <div id="stickyLabel">Gesamt (aktiv, pro Monat)</div>
+          <div class="strong" id="totalBottom">€ 0,00</div>
       </div>
+
 
       <button class="fab" id="fab" aria-label="Abo hinzufügen">+</button>
       <p class="note">Daten bleiben lokal auf deinem Gerät wenn du das willst. Kein Konto, keine Cloud, kein Bullshit.</p>

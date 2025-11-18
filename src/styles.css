@@ -103,11 +103,22 @@ html[data-theme=dark] {
   padding: 12px 14px;
   border-top: 1px solid var(--color-border);
   display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr;
+  gap: 6px;
+  /* Mobile-Layout (Standard):
+     Zeile 1: Titel | Betrag
+     Zeile 2: Untertitel | Checkbox
+  */
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: "title amount" "title active";
+  /* Betrag rechts oben */
+  /* Checkbox rechts unten */
 }
 .row:first-child {
   border-top: none;
+}
+.row .row__title {
+  grid-area: title;
 }
 .row .row__title .name {
   font-weight: 600;
@@ -117,13 +128,32 @@ html[data-theme=dark] {
   opacity: 0.7;
   margin-top: 2px;
 }
+.row > .right.strong {
+  grid-area: amount;
+  align-self: start;
+  margin-left: 8px;
+}
+.row > .center {
+  grid-area: active;
+  align-self: end;
+  text-align: right;
+}
 @media (min-width: 900px) {
   .row {
+    /* Desktop: wieder 6-Spalten-Layout */
     grid-template-columns: minmax(14ch, 2.2fr) minmax(10ch, 1fr) minmax(8ch, 1fr) minmax(6ch, 0.8fr) minmax(10ch, 1fr) minmax(6ch, 0.8fr);
+    grid-template-rows: auto;
+    grid-template-areas: none;
     align-items: center;
+    gap: 10px;
   }
   .row .row__title .sub {
     display: none;
+  }
+  .row > .right.strong,
+  .row > .center {
+    margin-left: 0;
+    text-align: right;
   }
 }
 
@@ -203,6 +233,28 @@ html[data-theme=dark] {
   font-size: 1rem;
   cursor: pointer;
   color: var(--color-text);
+}
+
+.menu__group {
+  padding: 0.75rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.menu__label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.menu__select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+  color: var(--color-text);
+  font-size: 0.95rem;
 }
 
 /* WARNING: "gefährliche" Aktion */

@@ -126,23 +126,67 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
     padding: 12px 14px;
     border-top: 1px solid var(--color-border);
     display: grid;
-    gap: 10px;
+    gap: 6px;
 
-    &:first-child { border-top: none; }
+    &:first-child {
+        border-top: none;
+    }
 
-    // Mobil: einspaltig (gestapelt)
-    grid-template-columns: 1fr;
+    /* Mobile-Layout (Standard):
+       Zeile 1: Titel | Betrag
+       Zeile 2: Untertitel | Checkbox
+    */
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+        "title amount"
+        "title active";
 
     .row__title {
-        .name { font-weight: 600; }
-        .sub  { font-size: 12px; opacity: .7; margin-top: 2px; }
+        grid-area: title;
+
+        .name {
+            font-weight: 600;
+        }
+
+        .sub {
+            font-size: 12px;
+            opacity: .7;
+            margin-top: 2px;
+        }
+    }
+
+    /* Betrag rechts oben */
+    > .right.strong {
+        grid-area: amount;
+        align-self: start;
+        margin-left: 8px;
+    }
+
+    /* Checkbox rechts unten */
+    > .center {
+        grid-area: active;
+        align-self: end;
+        text-align: right;
     }
 
     @media (min-width: $bp-md) {
+        /* Desktop: wieder 6-Spalten-Layout */
         grid-template-columns: $list-cols;
+        grid-template-rows: auto;
+        grid-template-areas: none;
         align-items: center;
+        gap: 10px;
 
-        .row__title .sub { display: none; }
+        .row__title .sub {
+            display: none;
+        }
+
+        > .right.strong,
+        > .center {
+            margin-left: 0;
+            text-align: right;
+        }
     }
 }
 
@@ -214,7 +258,6 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
     margin: 0;
     padding: 0;
 }
-
 .menu__item {
     width: 100%;
     text-align: left;
@@ -224,6 +267,25 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
     font-size: 1rem;
     cursor: pointer;
     color: var(--color-text);
+}
+.menu__group {
+    padding: 0.75rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.menu__label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+.menu__select {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+    font-size: 0.95rem;
 }
 
 /* WARNING: "gefährliche" Aktion */

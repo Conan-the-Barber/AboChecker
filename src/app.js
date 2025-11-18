@@ -3,8 +3,11 @@
 // --- Speicherfunktionen -------------------------------------------------------
 // --- Persistenter Speicher für Abos (localStorage) ---
 
-const STORAGE_KEY = "abo-checker.subscriptions.v1";
-const THEME_KEY = "abo-checker.theme";
+const STORAGE_KEY   = "abo-checker.subscriptions.v1";
+const THEME_KEY     = "abo-checker.theme";
+const DISPLAY_KEY   = "abo-checker.displayCycle";
+
+const displayModes = ["monthly", "yearly", "weekly", "quarterly", "daily"];
 
 function loadSubscriptions() {
     try {
@@ -90,6 +93,71 @@ function toggleTheme() {
     applyTheme(next);
 }
 
+function getStoredDisplayCycle() {
+    try {
+        const value = localStorage.getItem(DISPLAY_KEY);
+        if (displayModes.includes(value)) {
+            return value;
+        }
+        return null;
+    } catch (err) {
+        console.error("Fehler beim Lesen der Anzeige-Einheit:", err);
+        return null;
+    }
+}
+
+function displayUnitLabel(cycle) {
+    switch (cycle) {
+        case "yearly":     return "Jahr";
+        case "weekly":     return "Woche";
+        case "quarterly":  return "Quartal";
+        case "daily":      return "Tag";
+        case "monthly":
+        default:           return "Monat";
+    }
+}
+
+function displayShortLabel(cycle) {
+    switch (cycle) {
+        case "yearly":     return "/Jahr";
+        case "weekly":     return "/Woche";
+        case "quarterly":  return "/Quartal";
+        case "daily":      return "/Tag";
+        case "monthly":
+        default:           return "/Monat";
+    }
+}
+
+function updateDisplayTexts() {
+    const unit = displayUnitLabel(displayCycle);
+    const shortUnit = displayShortLabel(displayCycle);
+
+    if (totalLabel) {
+        totalLabel.textContent = `Kosten aktiv (pro ${unit}):`;
+    }
+    if (stickyLabel) {
+        stickyLabel.textContent = `Gesamt (aktiv, pro ${unit})`;
+    }
+    if (amountHeader) {
+        amountHeader.textContent = `€ ${shortUnit}`;
+    }
+    if (displaySelect) {
+        displaySelect.value = displayCycle;
+    }
+}
+
+function setDisplayCycle(cycle) {
+    if (!displayModes.includes(cycle)) {
+        cycle = "monthly";
+    }
+    displayCycle = cycle;
+    try {
+        localStorage.setItem(DISPLAY_KEY, displayCycle);
+    } catch (err) {
+        console.error("Fehler beim Speichern der Anzeige-Einheit:", err);
+    }
+    render(); // render kümmert sich auch um Texte
+}
 
 // --- Daten + Utils -----------------------------------------------------------
 
@@ -102,23 +170,45 @@ const cycles = [
 ];
 
 function toMonthly(amount, cycle) {
-const a = Number(amount) || 0;
-switch (cycle) {
-    case "monthly":   return a;
-    case "yearly":    return a / 12;
-    case "weekly":    return (a * 52) / 12;      // ≈ 4,333 ×
-    case "quarterly": return a / 3;
-    case "daily":     return a * 30.4375;        // durchschnittlicher Monat
-    default:          return a;
+    const a = Number(amount) || 0;
+    switch (cycle) {
+        case "monthly":   return a;
+        case "yearly":    return a / 12;
+        case "weekly":    return (a * 52) / 12;      // ≈ 4,333 ×
+        case "quarterly": return a / 3;
+        case "daily":     return a * 30.4375;        // durchschnittlicher Monat
+        default:          return a;
+    }
 }
+
+function fromMonthly(monthAmount, targetCycle) {
+    const m = Number(monthAmount) || 0;
+    switch (targetCycle) {
+        case "yearly":
+            return m * 12;
+        case "weekly":
+            return (m * 12) / 52;       // inverse zu weekly → monthly
+        case "quarterly":
+            return m * 3;
+        case "daily":
+            return m / 30.4375;
+        case "monthly":
+        default:
+            return m;
+    }
+}
+
+function toDisplayUnit(amount, fromCycle, targetCycle) {
+    const perMonth = toMonthly(amount, fromCycle);
+    return fromMonthly(perMonth, targetCycle);
 }
 
 function money(n) {
-return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
+    return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
 }
 
 function uuid() {
-return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
 // --- State -------------------------------------------------------------------
@@ -126,6 +216,7 @@ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_$
 let subs = [];
 let formOpen = false;
 let formMode = "new"; // "new" | "view" | "edit"
+let displayCycle = "monthly";     // NEU: Anzeige-Einheit für Gesamt/Spalte
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel           = document.getElementById("panel");
@@ -134,6 +225,9 @@ const emptyEl         = document.getElementById("empty");
 const totalTop        = document.getElementById("totalTop");
 const totalBottom     = document.getElementById("totalBottom");
 const fab             = document.getElementById("fab");
+const totalLabel      = document.getElementById("totalLabel");
+const stickyLabel     = document.getElementById("stickyLabel");
+const amountHeader    = document.getElementById("amountHeader");
 
 const form            = document.getElementById("form");
 const formId          = document.getElementById("formId");
@@ -157,6 +251,7 @@ const menuBtn         = document.getElementById("menuBtn");
 const menu            = document.getElementById("menu");
 const menuOverlay     = document.getElementById("menuOverlay");
 const menuItemTheme   = document.getElementById("menuItemTheme");
+const displaySelect   = document.getElementById("displaySelect");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -172,10 +267,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 function init() {
+    // Anzeige-Einheit aus Storage laden
+    const storedDisplay = getStoredDisplayCycle();
+    if (storedDisplay) {
+        displayCycle = storedDisplay;
+    }
+    updateDisplayTexts();
+
     // cycle options
     cycleSelect.innerHTML = cycles
         .map(c => `<option value="${c.value}">${c.label}</option>`)
         .join("");
+
+        // Auswahl im Menü für Anzeige-Einheit
+        if (displaySelect) {
+            displaySelect.value = displayCycle;
+            displaySelect.addEventListener("change", (e) => {
+                setDisplayCycle(e.target.value);
+            });
+        }
 
     // Theme initialisieren
     initTheme();
@@ -183,7 +293,7 @@ function init() {
     // events
     fab.addEventListener("click", () => {
         resetForm();           // macht Felder leer
-        setFormMode("new");    // NEW: Speichern + Abbrechen
+        setFormMode("new");    // bei NEW: Speichern + Abbrechen
         openForm(true);
     });
 
@@ -259,7 +369,21 @@ function init() {
     });
 }
 
+function handleMenuAction(action) {
+    switch (action) {
+        case "clear-all":
+            clearAllSubscriptions();
+            break;
+        case "toggle-dark":
+            toggleTheme();
+            break;
+        default:
+            break;
+    }
 
+    // Nach Aktion Menü schließen
+    openMenu(false);
+}
 
 // --- Rendering ---------------------------------------------------------------
 function render() {
@@ -272,15 +396,8 @@ function render() {
         listEl.innerHTML = subs
             .map((s) => {
                 const cycleLabel = (cycles.find(c => c.value === s.cycle) || {}).label || s.cycle;
-                const perMonth = money(toMonthly(s.amount, s.cycle));
+                const perDisplay = money(toDisplayUnit(s.amount, s.cycle, displayCycle));
                 const debitLabel = s.debit === "manual" ? "manuell" : "automatisch";
-
-                // Untertitel dynamisch bauen
-                const subParts = [];
-                if (s.provider) subParts.push(escapeHTML(s.provider));
-                subParts.push(money(s.amount));
-                subParts.push(cycleLabel);
-                const subtitle = subParts.join(" · ");
 
                 return `
                     <li class="row" data-id="${s.id}">
@@ -291,25 +408,26 @@ function render() {
 
                         <div class="hide-sm">${escapeHTML(debitLabel || "-")}</div>
                         <div class="hide-sm">${cycleLabel}</div>
-                        <div class="right strong">${perMonth}</div>
+                        <div class="right strong">${perDisplay}</div>
 
                         <div class="center">
                             <input type="checkbox" data-id="${s.id}" ${s.active ? "checked" : ""} />
                         </div>
                     </li>
                 `;
-
             })
             .join("");
     }
 
-    // Summen
+    // Summen (nur aktive) in aktueller Anzeige-Einheit
     const total = subs
         .filter((s) => s.active)
-        .reduce((acc, s) => acc + toMonthly(s.amount, s.cycle), 0);
+        .reduce((acc, s) => acc + toDisplayUnit(s.amount, s.cycle, displayCycle), 0);
 
     totalTop.textContent = money(total);
     totalBottom.textContent = money(total);
+
+    updateDisplayTexts();
 
     // persist
     saveSubscriptions(subs);
@@ -536,26 +654,6 @@ function openMenu(open) {
     const isOpen = !!open;
     menu.classList.toggle("menu--open", isOpen);
     menuOverlay.classList.toggle("menu-overlay--visible", isOpen);
-}
-
-function handleMenuAction(action) {
-    switch (action) {
-        case "clear-all":
-            clearAllSubscriptions();
-            break;
-        case "toggle-dark":
-            toggleTheme();
-            break;
-        // case "language":
-        //     openLanguageDialog();
-        //     break;
-
-        default:
-            break;
-    }
-
-    // Nach Aktion Menü schließen
-    openMenu(false);
 }
 
 
