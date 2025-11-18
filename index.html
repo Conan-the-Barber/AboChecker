@@ -50,6 +50,18 @@
             <input id="name" placeholder="Netflix, Handyvertrag…" />
           </label>
 
+          <div class="fieldgroup">
+            <label class="field">
+              <span>Anbieter</span>
+              <input id="provider" placeholder="Telekom, Spotify…" />
+            </label>
+
+            <label class="field">
+              <span>Kategorie</span>
+              <input id="category" placeholder="Streaming, Handy, Versicherung…" />
+            </label>
+          </div>
+
           <label class="field">
             <span>Abbuchung</span>
             <select id="debit">
@@ -61,7 +73,14 @@
           <div class="fieldgroup">
             <label class="field">
               <span>Betrag</span>
-              <input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" />
+              <input
+                id="amount"
+                type="number"
+                inputmode="decimal"
+                step="0.01"
+                min="0"
+                placeholder="0,00"
+              />
             </label>
 
             <label class="field">
@@ -70,19 +89,47 @@
             </label>
           </div>
 
+          <div class="fieldgroup">
+            <label class="field">
+              <span>Startdatum</span>
+              <input id="startDate" type="date" />
+            </label>
+
+            <label class="field">
+              <span>Ablaufdatum (optional)</span>
+              <input id="endDate" type="date" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Abbuchungstag (optional)</span>
+            <input
+              id="billingDay"
+              type="number"
+              min="1"
+              max="31"
+              placeholder="Tag im Monat (1–31)"
+            />
+          </label>
+
+          <label class="field">
+            <span>Notiz</span>
+            <textarea id="note" rows="3" placeholder="Infos, Vertragsnummer…"></textarea>
+          </label>
+
           <label class="switch">
             <input id="active" type="checkbox" checked />
             <span>Aktiv</span>
           </label>
 
           <div class="actions">
-              <button type="button" id="editBtn" class="btn--primary">Bearbeiten</button>
-              <button type="submit" id="submitBtn" class="btn btn--primary">Speichern</button>
-              <button type="button" id="deleteBtn" class="btn btn--danger">Löschen</button>
-              <button type="button" id="cancelBtn" class="btn--primary">Abbrechen</button>
+            <button type="button" id="editBtn" class="btn--primary">Bearbeiten</button>
+            <button type="submit" id="submitBtn" class="btn btn--primary">Speichern</button>
+            <button type="button" id="deleteBtn" class="btn btn--danger">Löschen</button>
+            <button type="button" id="cancelBtn" class="btn--primary">Abbrechen</button>
           </div>
-
         </form>
+
       </div>
 
       <!-- Liste -->
@@ -93,7 +140,6 @@
           <div>Zahlungsweise</div>
           <div class="right">€/Monat</div>
           <div class="center">Aktiv</div>
-<!--           <div class="right">Aktion</div> -->
         </div>
 
         <div id="empty" class="empty">Noch keine Abos hinzugefügt.</div>

@@ -274,7 +274,7 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
 @media (min-width: 520px) { .fieldgroup { grid-template-columns: 1fr 1fr; } }
 .field span { font-size: 12px; opacity: .8; }
 
-input, select {
+input, select, textarea {
     width: 100%;
     padding: 10px 12px;
     border-radius: 10px;
@@ -283,26 +283,85 @@ input, select {
     color: var(--color-text);
 }
 
-
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
 
 .actions { display: flex; gap: 8px; }
 
 .panel {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: -420px;
+    inset: 0;                       // top:0; right:0; bottom:0; left:0;
     background: var(--color-bg-panel);
-    border-top: 1px solid var(--color-border);
-    border-radius: 16px 16px 0 0;
-    box-shadow: 0 -10px 30px rgba(0,0,0,.08);
-    transition: bottom .25s ease;
-    z-index: 30;
+    z-index: 1000;
 
-    &.panel--open {
-        bottom: 56px; // über der stickybar
-    }
+    // optional: wenn du oben trotzdem Rundung willst:
+    border-radius: 16px 16px 0 0;
+    // oder ganz ohne:
+    // border-radius: 0;
+
+    box-shadow: 0 -10px 30px rgba(0,0,0,.08);
+
+    // Startzustand: unterhalb des Viewports
+    transform: translateY(100%);
+    transition: transform .25s ease;
+
+    overflow-y: auto;
+    padding: 14px 16px 16px;
+}
+
+.panel.panel--open {
+    transform: translateY(0);
+}
+// --- anpassung für viewMode des panels
+/* Panel im View-Modus: wie Detailansicht */
+.panel.panel--view {
+  // evtl. hier noch ne etwas andere Optik
+  // background: var(--color-bg); // z.B. gleiche Farbe wie App oder so. Mary?
+}
+.panel.panel--view .form {
+    gap: 6px;
+}
+/* Label im View-Modus etwas "meta" darstellen */
+.panel.panel--view .field span {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    opacity: .65;
+}
+/* Inputs wie normaler Text anzeigen */
+.panel.panel--view input,
+.panel.panel--view select,
+.panel.panel--view textarea {
+    border: none;
+    padding: 2px 0;
+    background: transparent;
+    box-shadow: none;
+    resize: none;
+    pointer-events: none; // nicht klickbar
+}
+/* Disabled-Text nicht ausgegraut */
+.panel.panel--view input[disabled],
+.panel.panel--view select[disabled],
+.panel.panel--view textarea[disabled] {
+    color: var(--color-text);
+    -webkit-text-fill-color: var(--color-text);
+    opacity: 1;
+}
+/* Switch (Aktiv-Checkbox) im View-Mode ausblenden*/
+.panel.panel--view .switch {
+    display: none;
+}
+/* Buttons im View-Modus: nur "Bearbeiten" + "Abbrechen" rechtsbündig */
+.panel.panel--view .actions {
+    justify-content: flex-end;
+}
+/* --- View-Mode: Dropdown ohne Pfeil --- */
+.panel.panel--view select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: none !important;
+    background-color: transparent;
+    padding-right: 0;
 }
 
 .stickybar {

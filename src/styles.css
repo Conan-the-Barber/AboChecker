@@ -289,7 +289,7 @@ html[data-theme=dark] {
   opacity: 0.8;
 }
 
-input, select {
+input, select, textarea {
   width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
@@ -312,18 +312,73 @@ input, select {
 
 .panel {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: -420px;
+  inset: 0;
   background: var(--color-bg-panel);
-  border-top: 1px solid var(--color-border);
+  z-index: 1000;
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.08);
-  transition: bottom 0.25s ease;
-  z-index: 30;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
 }
+
 .panel.panel--open {
-  bottom: 56px;
+  transform: translateY(0);
+}
+
+/* Panel im View-Modus: wie Detailansicht */
+.panel.panel--view .form {
+  gap: 6px;
+}
+
+/* Label im View-Modus etwas "meta" darstellen */
+.panel.panel--view .field span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+
+/* Inputs wie normaler Text anzeigen */
+.panel.panel--view input,
+.panel.panel--view select,
+.panel.panel--view textarea {
+  border: none;
+  padding: 2px 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+  pointer-events: none;
+}
+
+/* Disabled-Text nicht ausgegraut */
+.panel.panel--view input[disabled],
+.panel.panel--view select[disabled],
+.panel.panel--view textarea[disabled] {
+  color: var(--color-text);
+  -webkit-text-fill-color: var(--color-text);
+  opacity: 1;
+}
+
+/* Switch (Aktiv-Checkbox) im View-Mode ausblenden*/
+.panel.panel--view .switch {
+  display: none;
+}
+
+/* Buttons im View-Modus: nur "Bearbeiten" + "Abbrechen" rechtsbündig */
+.panel.panel--view .actions {
+  justify-content: flex-end;
+}
+
+/* --- View-Mode: Dropdown ohne Pfeil --- */
+.panel.panel--view select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none !important;
+  background-color: transparent;
+  padding-right: 0;
 }
 
 .stickybar {

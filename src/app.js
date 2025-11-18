@@ -122,34 +122,41 @@ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_$
 }
 
 // --- State -------------------------------------------------------------------
-let subs = [];    // {id, name, amount:Number, cycle:String, active:Boolean}
-let formOpen = false;             // Panel-Status
+// {id, name, provider, category, amount, cycle, startDate, billingDay, endDate, note, debit, active}
+let subs = [];
+let formOpen = false;
 let formMode = "new"; // "new" | "view" | "edit"
 
 // --- DOM Refs ----------------------------------------------------------------
-const panel      = document.getElementById("panel");
-const listEl     = document.getElementById("list");
-const emptyEl    = document.getElementById("empty");
-const totalTop   = document.getElementById("totalTop");
-const totalBottom= document.getElementById("totalBottom");
-const fab        = document.getElementById("fab");
+const panel           = document.getElementById("panel");
+const listEl          = document.getElementById("list");
+const emptyEl         = document.getElementById("empty");
+const totalTop        = document.getElementById("totalTop");
+const totalBottom     = document.getElementById("totalBottom");
+const fab             = document.getElementById("fab");
 
-const form       = document.getElementById("form");
-const formId     = document.getElementById("formId");
-const nameInput  = document.getElementById("name");
-const debitSelect= document.getElementById("debit");
-const amountInput= document.getElementById("amount");
-const cycleSelect= document.getElementById("cycle");
-const activeChk  = document.getElementById("active");
-const submitBtn  = document.getElementById("submitBtn");
-const cancelBtn  = document.getElementById("cancelBtn");
-const deleteBtn  = document.getElementById("deleteBtn");
-const editBtn    = document.getElementById("editBtn");
+const form            = document.getElementById("form");
+const formId          = document.getElementById("formId");
+const nameInput       = document.getElementById("name");
+const debitSelect     = document.getElementById("debit");
+const amountInput     = document.getElementById("amount");
+const cycleSelect     = document.getElementById("cycle");
+const activeChk       = document.getElementById("active");
+const submitBtn       = document.getElementById("submitBtn");
+const cancelBtn       = document.getElementById("cancelBtn");
+const deleteBtn       = document.getElementById("deleteBtn");
+const editBtn         = document.getElementById("editBtn");
+const providerInput   = document.getElementById("provider");
+const categoryInput   = document.getElementById("category");
+const startDateInput  = document.getElementById("startDate");
+const endDateInput    = document.getElementById("endDate");
+const billingDayInput = document.getElementById("billingDay");
+const noteInput       = document.getElementById("note");
 
-const menuBtn       = document.getElementById("menuBtn");
-const menu          = document.getElementById("menu");
-const menuOverlay   = document.getElementById("menuOverlay");
-const menuItemTheme = document.getElementById("menuItemTheme");
+const menuBtn         = document.getElementById("menuBtn");
+const menu            = document.getElementById("menu");
+const menuOverlay     = document.getElementById("menuOverlay");
+const menuItemTheme   = document.getElementById("menuItemTheme");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -268,22 +275,29 @@ function render() {
                 const perMonth = money(toMonthly(s.amount, s.cycle));
                 const debitLabel = s.debit === "manual" ? "manuell" : "automatisch";
 
-            return `
-                <li class="row" data-id="${s.id}">
-                    <div class="row__title">
-                        <div class="name">${escapeHTML(s.name)}</div>
-                        <div class="sub">${money(s.amount)} · ${cycleLabel}</div>
-                    </div>
+                // Untertitel dynamisch bauen
+                const subParts = [];
+                if (s.provider) subParts.push(escapeHTML(s.provider));
+                subParts.push(money(s.amount));
+                subParts.push(cycleLabel);
+                const subtitle = subParts.join(" · ");
 
-                    <div class="hide-sm">${escapeHTML(debitLabel || "-")}</div>
-                    <div class="hide-sm">${cycleLabel}</div>
-                    <div class="right strong">${perMonth}</div>
+                return `
+                    <li class="row" data-id="${s.id}">
+                        <div class="row__title">
+                            <div class="name">${escapeHTML(s.name)}</div>
+                            <div class="sub">${money(s.amount)} · ${cycleLabel}</div>
+                        </div>
 
-                    <div class="center">
-                        <input type="checkbox" data-id="${s.id}" ${s.active ? "checked" : ""} />
-                    </div>
-                </li>
-            `;
+                        <div class="hide-sm">${escapeHTML(debitLabel || "-")}</div>
+                        <div class="hide-sm">${cycleLabel}</div>
+                        <div class="right strong">${perMonth}</div>
+
+                        <div class="center">
+                            <input type="checkbox" data-id="${s.id}" ${s.active ? "checked" : ""} />
+                        </div>
+                    </li>
+                `;
 
             })
             .join("");
@@ -307,19 +321,64 @@ function onSubmit(e) {
 
     const id = formId.value || null;
     const name = (nameInput.value || "").trim();
+    const provider = (providerInput.value || "").trim();
+    const category = (categoryInput.value || "").trim();
+
     const debit = (debitSelect?.value || "auto");
+
     const rawAmount = (amountInput.value || "").replace(",", "."); // Kommas erlauben
     const amount = Number(rawAmount);
 
     const cycle = cycleSelect.value || "monthly";
+
+    const startDate = (startDateInput.value || "").trim();
+    const endDate = (endDateInput.value || "").trim();
+
+    const billingDayRaw = (billingDayInput.value || "").trim();
+    const billingDay = billingDayRaw ? Number(billingDayRaw) : null;
+
+    const note = (noteInput.value || "").trim();
+
     const active = !!activeChk.checked;
 
     if (!name || !isFinite(amount) || amount <= 0) return;
 
     if (id) {
-        subs = subs.map(s => s.id === id ? { ...s, name, debit, amount, cycle, active } : s);
+        // Update
+        subs = subs.map(s =>
+            s.id === id
+                ? {
+                    ...s,
+                    name,
+                    provider,
+                    category,
+                    debit,
+                    amount,
+                    cycle,
+                    startDate,
+                    endDate,
+                    billingDay,
+                    note,
+                    active
+                }
+                : s
+        );
     } else {
-        subs = [{ id: uuid(), name, debit, amount, cycle, active }, ...subs];
+        // Neu
+        subs = [{
+            id: uuid(),
+            name,
+            provider,
+            category,
+            debit,
+            amount,
+            cycle,
+            startDate,
+            endDate,
+            billingDay,
+            note,
+            active
+        }, ...subs];
     }
 
     resetForm();
@@ -327,12 +386,15 @@ function onSubmit(e) {
     render();
 }
 
+
 function setFormMode(mode) {
     formMode = mode;
 
     const isView = mode === "view";
     const isNew  = mode === "new";
     const isEdit = mode === "edit";
+
+    panel.classList.toggle("panel--view", isView);
 
     // alle Eingabefelder im Formular holen
     const controls = form.querySelectorAll("input, select, textarea");
@@ -384,11 +446,23 @@ function startEdit(id) {
         return;
     }
 
-    formId.value      = s.id;
-    nameInput.value   = s.name;
-    debitSelect.value = s.debit || "auto";
-    amountInput.value = String(s.amount);
-    cycleSelect.value = s.cycle;
+    formId.value        = s.id;
+    nameInput.value     = s.name || "";
+    providerInput.value = s.provider || "";
+    categoryInput.value = s.category || "";
+
+    debitSelect.value   = s.debit || "auto";
+    amountInput.value   = String(s.amount ?? "");
+    cycleSelect.value   = s.cycle || "monthly";
+
+    startDateInput.value  = s.startDate || "";
+    endDateInput.value    = s.endDate || "";
+    billingDayInput.value = (s.billingDay != null && !Number.isNaN(s.billingDay))
+        ? String(s.billingDay)
+        : "";
+
+    noteInput.value = s.note || "";
+
     activeChk.checked = !!s.active;
 
     setFormMode("view");
@@ -398,25 +472,22 @@ function startEdit(id) {
 function resetForm() {
     form.reset();
     formId.value = "";
+
+    // Defaults für Selects / Checkbox
     debitSelect.value = "auto";
     cycleSelect.value = "monthly";
     activeChk.checked = true;
+
+    // neue Felder explizit leeren
+    providerInput.value   = "";
+    categoryInput.value   = "";
+    startDateInput.value  = "";
+    endDateInput.value    = "";
+    billingDayInput.value = "";
+    noteInput.value       = "";
+
     setFormMode("new");
 }
-
-/* // View-Modus: Formular nur zum Ansehen, Bearbeiten über Button
-function startView(id) {
-    const s = subs.find(x => x.id === id);
-    if (!s) return;
-    formId.value = s.id;
-    nameInput.value = s.name;
-    debitSelect.value = s.debit || "auto";
-    amountInput.value = String(s.amount);
-    cycleSelect.value = s.cycle;
-    activeChk.checked = !!s.active;
-    editBtn.textContent = "Bearbeiten";
-    openForm(true);
-} */
 
 function removeSub(id) {
     const confirmed = window.confirm(
