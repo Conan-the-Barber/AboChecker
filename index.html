@@ -1,0 +1,112 @@
+<!-- /home/abrink/Schreibtisch/Projekte/AboChecker/abo-checker/index.html -->
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Abo Checker</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+
+  <div id="menuOverlay" class="menu-overlay"></div>
+
+  <nav id="menu" class="menu">
+      <ul class="menu__list">
+          <li>
+              <button class="menu__item" data-menu-action="clear-all">
+                  Alle Abos entfernen
+              </button>
+          </li>
+          <li>
+              <button class="menu__item" data-menu-action="toggle-dark" id="menuItemTheme">
+                  Darkmode umschalten
+              </button>
+          </li>
+
+          <!-- Platzhalter für später:
+          <li><button class="menu__item" data-menu-action="language">Sprache</button></li>
+          -->
+      </ul>
+  </nav>
+
+  <body>
+    <div class="app" id="app">
+      <header class="app__header">
+        <h1>Abo Checker</h1>
+        <div class="app__total">Monatskosten aktiv: <b id="totalTop">€ 0,00</b></div>
+        <button id="menuBtn" class="menu-btn" aria-label="Menü öffnen">
+        ☰
+        </button>
+      </header>
+
+      <!-- Formular-Panel -->
+      <div class="panel" id="panel">
+        <form class="form" id="form">
+          <input type="hidden" id="formId" />
+
+          <label class="field">
+            <span>Name</span>
+            <input id="name" placeholder="Netflix, Handyvertrag…" />
+          </label>
+
+          <label class="field">
+            <span>Abbuchung</span>
+            <select id="debit">
+              <option value="auto">automatisch</option>
+              <option value="manual">manuell</option>
+            </select>
+          </label>
+
+          <div class="fieldgroup">
+            <label class="field">
+              <span>Betrag</span>
+              <input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0,00" />
+            </label>
+
+            <label class="field">
+              <span>Zahlungsweise</span>
+              <select id="cycle"></select>
+            </label>
+          </div>
+
+          <label class="switch">
+            <input id="active" type="checkbox" checked />
+            <span>Aktiv</span>
+          </label>
+
+          <div class="actions">
+            <button class="btn btn--primary" type="submit" id="submitBtn">Hinzufügen</button>
+            <button class="btn" type="button" id="cancelBtn">Abbrechen</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Liste -->
+      <div class="card">
+        <div class="list__head">
+          <div>Abo</div>
+          <div>Abbuchung</div>
+          <div>Zahlungsweise</div>
+          <div class="right">€/Monat</div>
+          <div class="center">Aktiv</div>
+          <div class="right">Aktion</div>
+        </div>
+
+        <div id="empty" class="empty">Noch keine Abos hinzugefügt.</div>
+        <ul class="list" id="list"></ul>
+      </div>
+
+      <!-- Sticky-Bottom -->
+      <div class="stickybar">
+        <div>Gesamt (aktive)</div>
+        <div class="strong" id="totalBottom">€ 0,00</div>
+      </div>
+
+      <button class="fab" id="fab" aria-label="Abo hinzufügen">+</button>
+      <p class="note">Daten bleiben lokal auf deinem Gerät wenn du das willst. Kein Konto, keine Cloud, kein Bullshit.</p>
+    </div>
+
+    <script src="src/app.js"></script>
+  </body>
+</html>

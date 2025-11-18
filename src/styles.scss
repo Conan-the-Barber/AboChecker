@@ -1,0 +1,332 @@
+/* /home/abrink/Schreibtisch/Projekte/AboChecker/abo-checker/src/styles.scss */
+
+// --- Farben & Basics -----------------------
+$bg-light: #f3f4f6;
+$bg-dark: #0b0d12;
+$card-light: #fff;
+$card-dark: #111827;
+$border-light: #e5e7eb;
+$border-dark: #1f2937;
+$text-dark: #111827;
+$text-light: #e5e7eb;
+
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+.app {
+    min-height: 100%;
+    background: var(--color-bg);
+    color: var(--color-text);
+    padding: 16px;
+    padding-bottom: 110px; // Platz für sticky bar
+}
+
+
+.app__header {
+display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px;
+
+h1 { font-size: 20px; margin: 0; }
+.app__total { font-size: 12px; opacity: .8; }
+}
+
+.card {
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+// --- THEME für Dark-/-Lightmode ------------------------------------
+
+$theme-light: (
+    bg: #f3f4f6,
+    bg-panel: #ffffff,
+    text: #111827,
+    text-muted: #6b7280,
+    accent: #2563eb,
+    border: #e5e7eb,
+    danger: #b91c1c,
+    row-alt: #f9fafb
+);
+
+$theme-dark: (
+    bg: #020617,
+    bg-panel: #0b1120,
+    text: #f9fafb,
+    text-muted: #9ca3af,
+    accent: #60a5fa,
+    border: #1f2937,
+    danger: #f97373,
+    row-alt: #111827
+);
+
+@mixin export-theme($theme) {
+    --color-bg: #{map-get($theme, bg)};
+    --color-bg-panel: #{map-get($theme, bg-panel)};
+    --color-text: #{map-get($theme, text)};
+    --color-text-muted: #{map-get($theme, text-muted)};
+    --color-accent: #{map-get($theme, accent)};
+    --color-border: #{map-get($theme, border)};
+    --color-danger: #{map-get($theme, danger)};
+    --color-row-alt: #{map-get($theme, row-alt)};
+}
+
+// Standard: Light-Theme
+:root {
+    @include export-theme($theme-light);
+}
+
+// Dark-Theme: wird über data-theme gesetzt
+html[data-theme="dark"] {
+    @include export-theme($theme-dark);
+}
+
+
+// --- Breakpoint (mobile first) ------------------------
+$bp-md: 900px;
+
+// 6-Spalten-Layout (Name, Col2, Col3, Col4, Col5, Col6)
+$list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
+            minmax(10ch, 1fr)
+            minmax(8ch,  1fr)
+            minmax(6ch,  .8fr)
+            minmax(10ch, 1fr)
+            minmax(6ch,  .8fr);
+
+// --- Kopfzeile ---------------------------------------
+.list__head {
+    display: none;
+    gap: 12px;
+    padding: 10px 14px;
+    font-weight: 600;
+    background: var(--color-row-alt);
+    border-bottom: 1px solid var(--color-border);
+
+    @media (min-width: $bp-md) {
+        display: grid;
+        grid-template-columns: $list-cols;
+        align-items: center;
+    }
+}
+
+.list { list-style: none; margin: 0; padding: 0; }
+.empty { padding: 16px; opacity: .7; }
+
+// --- Zeilen -------------------------------------------
+
+.row {
+    padding: 12px 14px;
+    border-top: 1px solid var(--color-border);
+    display: grid;
+    gap: 10px;
+
+    &:first-child { border-top: none; }
+
+    // Mobil: einspaltig (gestapelt)
+    grid-template-columns: 1fr;
+
+    .row__title {
+        .name { font-weight: 600; }
+        .sub  { font-size: 12px; opacity: .7; margin-top: 2px; }
+    }
+
+    @media (min-width: $bp-md) {
+        grid-template-columns: $list-cols;
+        align-items: center;
+
+        .row__title .sub { display: none; }
+    }
+}
+
+// --- Bürgermenü ------------------------------------------
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+}
+
+.app-title {
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.menu-btn {
+    border: none;
+    background: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    color: var(--color-text);
+
+}
+
+/* Overlay hinter dem Menü */
+.menu-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease-out;
+    z-index: 40;
+}
+
+/* Menü-Panel */
+.menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 70vw;
+    max-width: 280px;
+    height: 100vh;
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+    transform: translateX(100%);
+    transition: transform 150ms ease-out;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+}
+
+/* Wenn geöffnet */
+.menu--open {
+    transform: translateX(0);
+}
+
+.menu-overlay--visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.menu__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.menu__item {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    padding: 0.75rem 0;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--color-text);
+}
+
+/* WARNING: "gefährliche" Aktion */
+.menu__item[data-menu-action="clear-all"] {
+    color: var(--color-danger);
+}
+
+// Sichtbarkeit
+.hide-sm { display: none; }
+@media (min-width: $bp-md) { .hide-sm { display: block; } }
+
+.right { text-align: right; }
+.center { text-align: center; }
+.strong { font-weight: 700; }
+.row__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.btn {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+
+    &:hover {
+        filter: brightness(0.97);
+    }
+
+    &--primary {
+        background: var(--color-accent);
+        color: #fff;
+        border-color: var(--color-accent);
+    }
+
+    &--danger {
+        background: var(--color-danger);
+        color: #fff;
+        border-color: var(--color-danger);
+    }
+}
+
+
+.form { display: grid; gap: 10px; padding: 14px; }
+.field { display: grid; gap: 6px; }
+.fieldgroup { display: grid; gap: 10px; }
+@media (min-width: 520px) { .fieldgroup { grid-template-columns: 1fr 1fr; } }
+.field span { font-size: 12px; opacity: .8; }
+
+input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+}
+
+
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+
+.actions { display: flex; gap: 8px; }
+
+.panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: -420px;
+    background: var(--color-bg-panel);
+    border-top: 1px solid var(--color-border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 30px rgba(0,0,0,.08);
+    transition: bottom .25s ease;
+    z-index: 30;
+
+    &.panel--open {
+        bottom: 56px; // über der stickybar
+    }
+}
+
+.stickybar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    background: rgba(255,255,255,.92); // kannst du, wenn du magst, auch etwas mit var() bauen
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--color-border);
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.fab {
+position: fixed; right: 14px; bottom: 70px; z-index: 25;
+width: 56px; height: 56px; border-radius: 999px; font-size: 26px; line-height: 0;
+background: #10b981; color: #fff; border: none; box-shadow: 0 8px 22px rgba(0,0,0,.18);
+cursor: pointer;
+
+&:active { transform: translateY(1px); }
+}
+
+.note { font-size: 12px; opacity: .65; margin-top: 12px; }
