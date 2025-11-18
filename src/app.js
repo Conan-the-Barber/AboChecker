@@ -377,6 +377,13 @@ function handleMenuAction(action) {
         case "toggle-dark":
             toggleTheme();
             break;
+/*         case "toggle-display":
+            cycleDisplayMode();
+            break; 
+            ==========================================
+            DEN PUNKT NOCH ANPASSEN DASS MENÜ BEI DROPDOWNTOGGLE SCHLIEßT!!!
+            ==========================================
+            */
         default:
             break;
     }
