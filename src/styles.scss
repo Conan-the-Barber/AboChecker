@@ -102,6 +102,21 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
             minmax(6ch,  .8fr);
 
 // --- Kopfzeile ---------------------------------------
+.listToolbar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px 0;
+}
+
+.listToolbar__search {
+    flex: 1 1 180px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+}
+
 .list__head {
     display: none;
     gap: 12px;
@@ -133,8 +148,8 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
     }
 
     /* Mobile-Layout (Standard):
-       Zeile 1: Titel | Betrag
-       Zeile 2: Untertitel | Checkbox
+        Zeile 1: Titel | Betrag
+        Zeile 2: Untertitel | Checkbox
     */
     grid-template-columns: 1fr auto;
     grid-template-rows: auto auto;

@@ -217,6 +217,7 @@ let subs = [];
 let formOpen = false;
 let formMode = "new"; // "new" | "view" | "edit"
 let displayCycle = "monthly";     // NEU: Anzeige-Einheit für Gesamt/Spalte
+let searchTerm = "";              // Suchtext für die Liste
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel           = document.getElementById("panel");
@@ -252,6 +253,7 @@ const menu            = document.getElementById("menu");
 const menuOverlay     = document.getElementById("menuOverlay");
 const menuItemTheme   = document.getElementById("menuItemTheme");
 const displaySelect   = document.getElementById("displaySelect");
+const searchInput     = document.getElementById("searchInput");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -368,6 +370,14 @@ function init() {
         const action = btn.dataset.menuAction;
         handleMenuAction(action);
     });
+
+    // Suche
+    if (searchInput) {
+        searchInput.addEventListener("input", (e) => {
+            searchTerm = (e.target.value || "").toLowerCase();
+            render();
+        });
+    }
 }
 
 function handleMenuAction(action) {
@@ -396,13 +406,39 @@ function handleMenuAction(action) {
 
 // --- Rendering ---------------------------------------------------------------
 function render() {
-    // Liste
+    // Sichtbare Liste anhand von Suche (Filter/Sortierung kommen später dazu)
+    let visibleSubs = subs;
+
+    if (searchTerm) {
+        const term = searchTerm;
+        visibleSubs = subs.filter((s) => {
+            const haystack = [
+                s.name || "",
+                s.provider || "",
+                s.category || "",
+                s.note || ""
+            ]
+                .join(" ")
+                .toLowerCase();
+
+            return haystack.includes(term);
+        });
+    }
+
+    // Liste + Empty-State
     if (subs.length === 0) {
+        // wirklich gar keine Abos angelegt
         emptyEl.style.display = "";
+        emptyEl.textContent = "Noch keine Abos hinzugefügt.";
+        listEl.innerHTML = "";
+    } else if (visibleSubs.length === 0) {
+        // es gibt Abos, aber keins passt zur Suche
+        emptyEl.style.display = "";
+        emptyEl.textContent = "Keine passenden Abos gefunden.";
         listEl.innerHTML = "";
     } else {
         emptyEl.style.display = "none";
-        listEl.innerHTML = subs
+        listEl.innerHTML = visibleSubs
             .map((s) => {
                 const cycleLabel = (cycles.find(c => c.value === s.cycle) || {}).label || s.cycle;
                 const perDisplay = money(toDisplayUnit(s.amount, s.cycle, displayCycle));
@@ -428,7 +464,7 @@ function render() {
             .join("");
     }
 
-    // Summen (nur aktive) in aktueller Anzeige-Einheit
+    // Summen (nur aktive) in aktueller Anzeige-Einheit – immer über ALLE, nicht nur gefilterte
     const total = subs
         .filter((s) => s.active)
         .reduce((acc, s) => acc + toDisplayUnit(s.amount, s.cycle, displayCycle), 0);
@@ -441,6 +477,7 @@ function render() {
     // persist
     saveSubscriptions(subs);
 }
+
 
 // --- Form & Actions ----------------------------------------------------------
 function onSubmit(e) {
