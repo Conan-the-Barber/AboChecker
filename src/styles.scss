@@ -344,6 +344,45 @@ $list-cols: minmax(14ch, 2.2fr)   // Titel/Name: darf breit werden
     }
 }
 
+// --- Kategorie-Auswahl mit Add- und delete-Button -----------------
+.category-control {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.category-control select {
+    flex: 1 1 auto;
+}
+
+.category-control__add,
+.category-control__delete {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+        filter: brightness(0.97);
+    }
+}
+
+/* Delete-Button optisch leicht "gefährlicher" */
+.category-control__delete {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+
+// --- Panel / Formular ----------------------------
 
 .form { display: grid; gap: 10px; padding: 14px; }
 .field { display: grid; gap: 6px; }
@@ -423,10 +462,12 @@ input, select, textarea {
     -webkit-text-fill-color: var(--color-text);
     opacity: 1;
 }
-/* Switch (Aktiv-Checkbox) im View-Mode ausblenden*/
-.panel.panel--view .switch {
+/* Switch (Aktiv-Checkbox und kategorieBtns) im View-Mode ausblenden*/
+.panel.panel--view .category-control__add,
+.panel.panel--view .category-control__delete {
     display: none;
 }
+
 /* Buttons im View-Modus: nur "Bearbeiten" + "Abbrechen" rechtsbündig */
 .panel.panel--view .actions {
     justify-content: flex-end;

@@ -59,17 +59,40 @@
             <input id="name" placeholder="Netflix, Handyvertrag…" />
           </label>
 
-          <div class="fieldgroup">
-            <label class="field">
+      <div class="fieldgroup">
+          <label class="field">
               <span>Anbieter</span>
               <input id="provider" placeholder="Telekom, Spotify…" />
-            </label>
+          </label>
 
-            <label class="field">
+          <label class="field">
               <span>Kategorie</span>
-              <input id="category" placeholder="Streaming, Handy, Versicherung…" />
-            </label>
-          </div>
+              <div class="category-control">
+                  <select id="categorySelect">
+                      <option value="">Keine Kategorie</option>
+                      <!-- Optionen kommen dynamisch aus JS -->
+                  </select>
+                  <button
+                      type="button"
+                      id="categoryAddBtn"
+                      class="category-control__add"
+                      aria-label="Kategorie hinzufügen"
+                      title="Kategorie hinzufügen"
+                  >
+                      +
+                  </button>
+                  <button
+                      type="button"
+                      id="categoryDeleteBtn"
+                      class="category-control__delete"
+                      aria-label="Kategorie löschen"
+                      title="Kategorie löschen"
+                  >
+                      🗑
+                  </button>
+              </div>
+          </label>
+      </div>
 
           <label class="field">
             <span>Abbuchung</span>
@@ -135,7 +158,7 @@
             <button type="button" id="editBtn" class="btn--primary">Bearbeiten</button>
             <button type="submit" id="submitBtn" class="btn btn--primary">Speichern</button>
             <button type="button" id="deleteBtn" class="btn btn--danger">Löschen</button>
-            <button type="button" id="cancelBtn" class="btn--primary">Abbrechen</button>
+            <button type="button" id="cancelBtn" class="btn--primary">Schließen</button>
           </div>
         </form>
 

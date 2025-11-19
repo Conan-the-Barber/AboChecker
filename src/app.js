@@ -211,6 +211,117 @@ function uuid() {
     return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+function getAllCategoriesFromSubs() {
+    const set = new Set();
+    subs.forEach((s) => {
+        if (s.category && typeof s.category === "string") {
+            set.add(s.category);
+        }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "de"));
+}
+
+function rebuildCategoryOptions() {
+    if (!categorySelect) {
+        return;
+    }
+
+    const currentValue = categorySelect.value || "";
+    const categories = getAllCategoriesFromSubs();
+
+    categorySelect.innerHTML = "";
+
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "Keine Kategorie";
+    categorySelect.appendChild(emptyOpt);
+
+    categories.forEach((cat) => {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        categorySelect.appendChild(opt);
+    });
+
+    // möglichst ursprüngliche Auswahl beibehalten
+    categorySelect.value = currentValue || "";
+}
+
+function ensureCategoryOption(cat) {
+    if (!categorySelect || !cat) {
+        return;
+    }
+    const valueNorm = String(cat).toLowerCase();
+    const exists = Array.from(categorySelect.options).some(
+        (opt) => opt.value.toLowerCase() === valueNorm
+    );
+    if (!exists) {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        categorySelect.appendChild(opt);
+    }
+}
+
+function addNewCategoryViaPrompt() {
+    let name = window.prompt("Neue Kategorie:");
+    if (!name) {
+        return;
+    }
+    name = name.trim();
+    if (!name) {
+        return;
+    }
+
+    ensureCategoryOption(name);
+    categorySelect.value = name;
+}
+
+function deleteSelectedCategory() {
+    if (!categorySelect) {
+        return;
+    }
+
+    const cat = (categorySelect.value || "").trim();
+    if (!cat) {
+        window.alert("Bitte zuerst eine Kategorie auswählen, die gelöscht werden soll.");
+        return;
+    }
+
+    const count = subs.filter((s) => (s.category || "") === cat).length;
+
+    const confirmed = window.confirm(
+        count > 0
+            ? `Kategorie "${cat}" aus ${count} Abo(s) entfernen?\n` +
+            `Die Abos werden auf "Keine Kategorie" gesetzt.`
+            : `Kategorie "${cat}" löschen?`
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    // Alle Abos, die diese Kategorie verwenden, auf "" setzen
+    subs = subs.map((s) => {
+        if ((s.category || "") === cat) {
+            return {
+                ...s,
+                category: ""
+            };
+        }
+        return s;
+    });
+
+    // Neu rendern (damit auch Dropdown aktualisiert wird)
+    render();
+
+    if (categorySelect) {
+        categorySelect.value = "";
+    }
+}
+
+
+
 // --- State -------------------------------------------------------------------
 // {id, name, provider, category, amount, cycle, startDate, billingDay, endDate, note, debit, active}
 let subs = [];
@@ -242,7 +353,11 @@ const cancelBtn       = document.getElementById("cancelBtn");
 const deleteBtn       = document.getElementById("deleteBtn");
 const editBtn         = document.getElementById("editBtn");
 const providerInput   = document.getElementById("provider");
-const categoryInput   = document.getElementById("category");
+const categorySelect  = document.getElementById("categorySelect");
+const categoryAddBtn  = document.getElementById("categoryAddBtn");
+const categoryDeleteBtn = document.getElementById("categoryDeleteBtn");
+
+
 const startDateInput  = document.getElementById("startDate");
 const endDateInput    = document.getElementById("endDate");
 const billingDayInput = document.getElementById("billingDay");
@@ -360,7 +475,14 @@ function init() {
         openMenu(false);
     });
 
-    // Klicks auf Menüeinträge
+    // Suche
+    if (searchInput) {
+        searchInput.addEventListener("input", (e) => {
+            searchTerm = (e.target.value || "").toLowerCase();
+            render();
+        });
+    }
+        // Klicks auf Menüeinträge
     menu.addEventListener("click", (event) => {
         const btn = event.target.closest(".menu__item");
         if (!btn) {
@@ -378,6 +500,19 @@ function init() {
             render();
         });
     }
+
+    // Kategorie hinzufügen
+    if (categoryAddBtn && categorySelect) {
+        categoryAddBtn.addEventListener("click", addNewCategoryViaPrompt);
+    }
+
+    // Kategorie löschen
+    if (categoryDeleteBtn && categorySelect) {
+        categoryDeleteBtn.addEventListener("click", deleteSelectedCategory);
+    }
+
+    // Startbefüllung Kategorie-Select aus bestehenden Abos
+    rebuildCategoryOptions();
 }
 
 function handleMenuAction(action) {
@@ -476,6 +611,9 @@ function render() {
 
     // persist
     saveSubscriptions(subs);
+
+    // Kategorien-Liste aus den aktuellen Abos aktualisieren
+    rebuildCategoryOptions();
 }
 
 
@@ -486,7 +624,7 @@ function onSubmit(e) {
     const id = formId.value || null;
     const name = (nameInput.value || "").trim();
     const provider = (providerInput.value || "").trim();
-    const category = (categoryInput.value || "").trim();
+    const category = (categorySelect.value || "").trim();
 
     const debit = (debitSelect?.value || "auto");
 
@@ -505,11 +643,13 @@ function onSubmit(e) {
 
     const active = !!activeChk.checked;
 
-    if (!name || !isFinite(amount) || amount <= 0) return;
+    if (!name || !isFinite(amount) || amount <= 0) {
+        return;
+    }
 
     if (id) {
         // Update
-        subs = subs.map(s =>
+        subs = subs.map((s) =>
             s.id === id
                 ? {
                     ...s,
@@ -529,27 +669,29 @@ function onSubmit(e) {
         );
     } else {
         // Neu
-        subs = [{
-            id: uuid(),
-            name,
-            provider,
-            category,
-            debit,
-            amount,
-            cycle,
-            startDate,
-            endDate,
-            billingDay,
-            note,
-            active
-        }, ...subs];
+        subs = [
+            {
+                id: uuid(),
+                name,
+                provider,
+                category,
+                debit,
+                amount,
+                cycle,
+                startDate,
+                endDate,
+                billingDay,
+                note,
+                active
+            },
+            ...subs
+        ];
     }
 
     resetForm();
     openForm(false);
     render();
 }
-
 
 function setFormMode(mode) {
     formMode = mode;
@@ -613,7 +755,12 @@ function startEdit(id) {
     formId.value        = s.id;
     nameInput.value     = s.name || "";
     providerInput.value = s.provider || "";
-    categoryInput.value = s.category || "";
+    // Kategorie spezialfall
+    if (categorySelect) {
+        const category = s.category || "";
+        ensureCategoryOption(category);
+        categorySelect.value = category;
+    }
 
     debitSelect.value   = s.debit || "auto";
     amountInput.value   = String(s.amount ?? "");
@@ -642,9 +789,11 @@ function resetForm() {
     cycleSelect.value = "monthly";
     activeChk.checked = true;
 
-    // neue Felder explizit leeren
+    // Felder explizit leeren
     providerInput.value   = "";
-    categoryInput.value   = "";
+    if (categorySelect) {
+        categorySelect.value = "";
+    }
     startDateInput.value  = "";
     endDateInput.value    = "";
     billingDayInput.value = "";
@@ -652,6 +801,7 @@ function resetForm() {
 
     setFormMode("new");
 }
+
 
 function removeSub(id) {
     const confirmed = window.confirm(

@@ -330,6 +330,43 @@ html[data-theme=dark] {
   border-color: var(--color-danger);
 }
 
+.category-control {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.category-control select {
+  flex: 1 1 auto;
+}
+
+.category-control__add,
+.category-control__delete {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+  color: var(--color-text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.category-control__add:hover,
+.category-control__delete:hover {
+  filter: brightness(0.97);
+}
+
+/* Delete-Button optisch leicht "gefährlicher" */
+.category-control__delete {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
 .form {
   display: grid;
   gap: 10px;
@@ -428,8 +465,9 @@ input, select, textarea {
   opacity: 1;
 }
 
-/* Switch (Aktiv-Checkbox) im View-Mode ausblenden*/
-.panel.panel--view .switch {
+/* Switch (Aktiv-Checkbox und kategorieBtns) im View-Mode ausblenden*/
+.panel.panel--view .category-control__add,
+.panel.panel--view .category-control__delete {
   display: none;
 }
 
