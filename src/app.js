@@ -284,6 +284,7 @@ function init() {
             displaySelect.value = displayCycle;
             displaySelect.addEventListener("change", (e) => {
                 setDisplayCycle(e.target.value);
+                openMenu(false); // Menü nach Auswahl schließen
             });
         }
 
@@ -376,6 +377,7 @@ function handleMenuAction(action) {
             break;
         case "toggle-dark":
             toggleTheme();
+            openMenu(false);
             break;
 /*         case "toggle-display":
             cycleDisplayMode();
