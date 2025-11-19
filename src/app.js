@@ -222,30 +222,60 @@ function getAllCategoriesFromSubs() {
 }
 
 function rebuildCategoryOptions() {
-    if (!categorySelect) {
-        return;
-    }
-
-    const currentValue = categorySelect.value || "";
     const categories = getAllCategoriesFromSubs();
 
-    categorySelect.innerHTML = "";
+    // Formular-Select
+    if (categorySelect) {
+        const currentValue = categorySelect.value || "";
 
-    const emptyOpt = document.createElement("option");
-    emptyOpt.value = "";
-    emptyOpt.textContent = "Keine Kategorie";
-    categorySelect.appendChild(emptyOpt);
+        categorySelect.innerHTML = "";
 
-    categories.forEach((cat) => {
-        const opt = document.createElement("option");
-        opt.value = cat;
-        opt.textContent = cat;
-        categorySelect.appendChild(opt);
-    });
+        const emptyOpt = document.createElement("option");
+        emptyOpt.value = "";
+        emptyOpt.textContent = "Keine Kategorie";
+        categorySelect.appendChild(emptyOpt);
 
-    // möglichst ursprüngliche Auswahl beibehalten
-    categorySelect.value = currentValue || "";
+        categories.forEach((cat) => {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = cat;
+            categorySelect.appendChild(opt);
+        });
+        // Vorherige Auswahl beibehalten, falls noch vorhanden
+        categorySelect.value = currentValue || "";
+    }
+
+    // Filter-Select
+    if (categoryFilterSelect) {
+        const currentFilter = categoryFilterSelect.value || "all";
+
+        categoryFilterSelect.innerHTML = "";
+
+        const optAll = document.createElement("option");
+        optAll.value = "all";
+        optAll.textContent = "Alle Kategorien";
+        categoryFilterSelect.appendChild(optAll);
+
+        const optNone = document.createElement("option");
+        optNone.value = "none";
+        optNone.textContent = "Ohne Kategorie";
+        categoryFilterSelect.appendChild(optNone);
+
+        categories.forEach((cat) => {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = cat;
+            categoryFilterSelect.appendChild(opt);
+        });
+
+        const hasPrev = Array.from(categoryFilterSelect.options).some(
+            (opt) => opt.value === currentFilter
+        );
+        categoryFilterSelect.value = hasPrev ? currentFilter : "all";
+    }
 }
+
+
 
 function ensureCategoryOption(cat) {
     if (!categorySelect || !cat) {
@@ -329,6 +359,11 @@ let formOpen = false;
 let formMode = "new"; // "new" | "view" | "edit"
 let displayCycle = "monthly";     // NEU: Anzeige-Einheit für Gesamt/Spalte
 let searchTerm = "";              // Suchtext für die Liste
+//filter states
+let statusFilter = "all";       // all | active | inactive
+let cycleFilter = "all";        // all | daily | weekly | ...
+let categoryFilter = "all";     // all | none | <kategorie>
+let isFilterPanelOpen = false;
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel           = document.getElementById("panel");
@@ -357,7 +392,6 @@ const categorySelect  = document.getElementById("categorySelect");
 const categoryAddBtn  = document.getElementById("categoryAddBtn");
 const categoryDeleteBtn = document.getElementById("categoryDeleteBtn");
 
-
 const startDateInput  = document.getElementById("startDate");
 const endDateInput    = document.getElementById("endDate");
 const billingDayInput = document.getElementById("billingDay");
@@ -367,8 +401,16 @@ const menuBtn         = document.getElementById("menuBtn");
 const menu            = document.getElementById("menu");
 const menuOverlay     = document.getElementById("menuOverlay");
 const menuItemTheme   = document.getElementById("menuItemTheme");
+
 const displaySelect   = document.getElementById("displaySelect");
 const searchInput     = document.getElementById("searchInput");
+
+const filterToggleBtn = document.getElementById("filterToggleBtn");
+const filterPanel     = document.getElementById("filterPanel");
+const statusFilterSelect   = document.getElementById("statusFilter");
+const cycleFilterSelect    = document.getElementById("cycleFilter");
+const categoryFilterSelect = document.getElementById("categoryFilter");
+const filterResetBtn       = document.getElementById("filterResetBtn");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -493,14 +535,6 @@ function init() {
         handleMenuAction(action);
     });
 
-    // Suche
-    if (searchInput) {
-        searchInput.addEventListener("input", (e) => {
-            searchTerm = (e.target.value || "").toLowerCase();
-            render();
-        });
-    }
-
     // Kategorie hinzufügen
     if (categoryAddBtn && categorySelect) {
         categoryAddBtn.addEventListener("click", addNewCategoryViaPrompt);
@@ -509,6 +543,57 @@ function init() {
     // Kategorie löschen
     if (categoryDeleteBtn && categorySelect) {
         categoryDeleteBtn.addEventListener("click", deleteSelectedCategory);
+    }
+
+    // Filter-Panel ein-/ausblenden
+    if (filterToggleBtn && filterPanel) {
+        filterToggleBtn.addEventListener("click", () => {
+            isFilterPanelOpen = !isFilterPanelOpen;
+            filterPanel.classList.toggle("filterPanel--open", isFilterPanelOpen);
+            filterToggleBtn.setAttribute("aria-expanded", isFilterPanelOpen ? "true" : "false");
+        });
+    }
+
+    // Status-Filter
+    if (statusFilterSelect) {
+        statusFilterSelect.value = statusFilter;
+        statusFilterSelect.addEventListener("change", (e) => {
+            statusFilter = e.target.value || "all";
+            render();
+        });
+    }
+
+    // Zyklus-Filter
+    if (cycleFilterSelect) {
+        cycleFilterSelect.value = cycleFilter;
+        cycleFilterSelect.addEventListener("change", (e) => {
+            cycleFilter = e.target.value || "all";
+            render();
+        });
+    }
+
+    // Kategorie-Filter
+    if (categoryFilterSelect) {
+        categoryFilterSelect.value = categoryFilter;
+        categoryFilterSelect.addEventListener("change", (e) => {
+            categoryFilter = e.target.value || "all";
+            render();
+        });
+    }
+
+    // Filter zurücksetzen
+    if (filterResetBtn) {
+        filterResetBtn.addEventListener("click", () => {
+            statusFilter = "all";
+            cycleFilter = "all";
+            categoryFilter = "all";
+
+            if (statusFilterSelect)   statusFilterSelect.value = "all";
+            if (cycleFilterSelect)    cycleFilterSelect.value = "all";
+            if (categoryFilterSelect) categoryFilterSelect.value = "all";
+
+            render();
+        });
     }
 
     // Startbefüllung Kategorie-Select aus bestehenden Abos
@@ -541,12 +626,31 @@ function handleMenuAction(action) {
 
 // --- Rendering ---------------------------------------------------------------
 function render() {
-    // Sichtbare Liste anhand von Suche (Filter/Sortierung kommen später dazu)
     let visibleSubs = subs;
 
+    // --- Status-Filter ------------------------------------------------------
+    if (statusFilter === "active") {
+        visibleSubs = visibleSubs.filter((s) => !!s.active);
+    } else if (statusFilter === "inactive") {
+        visibleSubs = visibleSubs.filter((s) => !s.active);
+    }
+
+    // --- Zyklus-Filter ------------------------------------------------------
+    if (cycleFilter !== "all") {
+        visibleSubs = visibleSubs.filter((s) => s.cycle === cycleFilter);
+    }
+
+    // --- Kategorie-Filter ---------------------------------------------------
+    if (categoryFilter === "none") {
+        visibleSubs = visibleSubs.filter((s) => !s.category);
+    } else if (categoryFilter !== "all") {
+        visibleSubs = visibleSubs.filter((s) => (s.category || "") === categoryFilter);
+    }
+
+    // --- Suche --------------------------------------------------------------
     if (searchTerm) {
         const term = searchTerm;
-        visibleSubs = subs.filter((s) => {
+        visibleSubs = visibleSubs.filter((s) => {
             const haystack = [
                 s.name || "",
                 s.provider || "",
@@ -560,14 +664,14 @@ function render() {
         });
     }
 
-    // Liste + Empty-State
+    // --- Liste + Empty-State ------------------------------------------------
     if (subs.length === 0) {
         // wirklich gar keine Abos angelegt
         emptyEl.style.display = "";
         emptyEl.textContent = "Noch keine Abos hinzugefügt.";
         listEl.innerHTML = "";
     } else if (visibleSubs.length === 0) {
-        // es gibt Abos, aber keins passt zur Suche
+        // es gibt Abos, aber keins passt zur Suche/Filterung
         emptyEl.style.display = "";
         emptyEl.textContent = "Keine passenden Abos gefunden.";
         listEl.innerHTML = "";
@@ -575,7 +679,7 @@ function render() {
         emptyEl.style.display = "none";
         listEl.innerHTML = visibleSubs
             .map((s) => {
-                const cycleLabel = (cycles.find(c => c.value === s.cycle) || {}).label || s.cycle;
+                const cycleLabel = (cycles.find((c) => c.value === s.cycle) || {}).label || s.cycle;
                 const perDisplay = money(toDisplayUnit(s.amount, s.cycle, displayCycle));
                 const debitLabel = s.debit === "manual" ? "manuell" : "automatisch";
 
@@ -599,10 +703,13 @@ function render() {
             .join("");
     }
 
-    // Summen (nur aktive) in aktueller Anzeige-Einheit – immer über ALLE, nicht nur gefilterte
+    // --- Summen (immer über alle aktiven, NICHT nur gefilterte) ------------
     const total = subs
         .filter((s) => s.active)
-        .reduce((acc, s) => acc + toDisplayUnit(s.amount, s.cycle, displayCycle), 0);
+        .reduce(
+            (acc, s) => acc + toDisplayUnit(s.amount, s.cycle, displayCycle),
+            0
+        );
 
     totalTop.textContent = money(total);
     totalBottom.textContent = money(total);
@@ -615,7 +722,6 @@ function render() {
     // Kategorien-Liste aus den aktuellen Abos aktualisieren
     rebuildCategoryOptions();
 }
-
 
 // --- Form & Actions ----------------------------------------------------------
 function onSubmit(e) {

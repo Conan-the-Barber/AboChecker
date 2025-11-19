@@ -173,7 +173,61 @@
                 type="search"
                 placeholder="Suchen nach Name, Anbieter, Kategorie…"
             />
+            <button
+                id="filterToggleBtn"
+                class="listToolbar__filterBtn"
+                type="button"
+                aria-expanded="false"
+                aria-controls="filterPanel"
+            >
+                <img src="src/img/icon/filter-icon-svg-7.png" alt="Filter">
+            </button>
         </div>
+
+        <div id="filterPanel" class="filterPanel">
+            <div class="filterPanel__row">
+                <label class="filterPanel__field">
+                    <span>Status</span>
+                    <select id="statusFilter">
+                        <option value="all">Alle</option>
+                        <option value="active">Nur aktive</option>
+                        <option value="inactive">Nur inaktive</option>
+                    </select>
+                </label>
+
+                <label class="filterPanel__field">
+                    <span>Zyklus</span>
+                    <select id="cycleFilter">
+                        <option value="all">Alle</option>
+                        <option value="daily">täglich</option>
+                        <option value="weekly">wöchentlich</option>
+                        <option value="monthly">monatlich</option>
+                        <option value="quarterly">vierteljährlich</option>
+                        <option value="yearly">jährlich</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="filterPanel__row">
+                <label class="filterPanel__field filterPanel__field--full">
+                    <span>Kategorie</span>
+                    <select id="categoryFilter">
+                        <option value="all">Alle Kategorien</option>
+                        <option value="none">Ohne Kategorie</option>
+                        <!-- Kategorien kommen aus JS -->
+                    </select>
+                </label>
+
+                <button
+                    type="button"
+                    id="filterResetBtn"
+                    class="filterPanel__reset"
+                >
+                    Filter zurücksetzen
+                </button>
+            </div>
+        </div>
+
         <div class="list__head">
             <div>Abo</div>
             <div>Abbuchung</div>
