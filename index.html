@@ -13,6 +13,48 @@
 
   <nav id="menu" class="menu">
       <ul class="menu__list">
+          <li class="menu__group">
+            <button
+                type="button"
+                id="reminderSettingsToggle"
+                class="menu__item menu__item--subtoggle"
+            >
+                Erinnerungen ▾
+            </button>
+
+            <div id="reminderSettingsPanel" class="menu__subpanel">
+                <label class="menu__field">
+                    <span>Zahlung: Vorlauf (Tage)</span>
+                    <input
+                        id="reminderBillingInput"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                    />
+                </label>
+
+                <label class="menu__field">
+                    <span>Verlängerung: Vorlauf (Tage)</span>
+                    <input
+                        id="reminderRenewalInput"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                    />
+                </label>
+
+                <label class="menu__field">
+                    <span>Uhrzeit</span>
+                    <input
+                        id="reminderTimeInput"
+                        type="time"
+                    />
+                </label>
+            </div>
+          </li>
+
           <li>
               <button class="menu__item" data-menu-action="clear-all">
                   Alle Abos entfernen

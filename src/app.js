@@ -7,7 +7,71 @@ const STORAGE_KEY   = "abo-checker.subscriptions.v1";
 const THEME_KEY     = "abo-checker.theme";
 const DISPLAY_KEY   = "abo-checker.displayCycle";
 
+const REMINDER_SETTINGS_KEY = "abo-checker.reminders.v1";
+// Default-Einstellungen für Erinnerungen
+const defaultReminderSettings = {
+    billingLeadDays: 3,   // Standard: 3 Tage vor Abbuchung erinnern
+    renewalLeadDays:7,  // Standard:7 Tage vor Ablauf / Verlängerung
+    timeOfDay: "09:00"    // Uhrzeit der Benachrichtigung
+};
+
 const displayModes = ["monthly", "yearly", "weekly", "quarterly", "daily"];
+
+/**
+ * Normalisiert ein Abo-Objekt aus dem Storage:
+ * - Ergänzt reminderConfig / reminderState, falls sie fehlen.
+ * - Dient vor allem der Abwärtskompatibilität mit alten App-Versionen.
+ *   Diese Funktion kann dauerhaft im Code bleiben.
+ */
+function normalizeSub(rawSub) {
+    // defensiv kopieren, damit wir das Original nicht mutieren
+    const sub = { ...rawSub };
+
+    // --- reminderConfig ------------------------------------------------------
+    if (!sub.reminderConfig || typeof sub.reminderConfig !== "object") {
+        sub.reminderConfig = {
+            mode: "default",          // "default" | "custom" | "off"
+            billingLeadDays: null,    // null = globaler Standard
+            renewalLeadDays: null
+        };
+    } else {
+        if (sub.reminderConfig.mode !== "default" &&
+            sub.reminderConfig.mode !== "custom" &&
+            sub.reminderConfig.mode !== "off") {
+            sub.reminderConfig.mode = "default";
+        }
+
+        if (typeof sub.reminderConfig.billingLeadDays !== "number") {
+            sub.reminderConfig.billingLeadDays = null;
+        }
+
+        if (typeof sub.reminderConfig.renewalLeadDays !== "number") {
+            sub.reminderConfig.renewalLeadDays = null;
+        }
+    }
+
+    // --- reminderState -------------------------------------------------------
+    if (!sub.reminderState || typeof sub.reminderState !== "object") {
+        sub.reminderState = {
+            snoozedUntil: null,
+            lastNotifiedAt: null,
+            lastNotificationType: null
+        };
+    } else {
+        if (typeof sub.reminderState.snoozedUntil !== "string") {
+            sub.reminderState.snoozedUntil = null;
+        }
+        if (typeof sub.reminderState.lastNotifiedAt !== "string") {
+            sub.reminderState.lastNotifiedAt = null;
+        }
+        if (sub.reminderState.lastNotificationType !== "billing" &&
+            sub.reminderState.lastNotificationType !== "renewal") {
+            sub.reminderState.lastNotificationType = null;
+        }
+    }
+
+    return sub;
+}
 
 function loadSubscriptions() {
     try {
@@ -25,7 +89,8 @@ function loadSubscriptions() {
             return [];
         }
 
-        return parsed;
+        // DEV-Funktion: alle Abos normalisieren (Backwards-Kompatibilität zu alten Versionen)
+        return parsed.map(normalizeSub);
     } catch (err) {
         console.error("Fehler beim Laden der Abos aus localStorage:", err);
         return [];
@@ -38,6 +103,45 @@ function saveSubscriptions(subscriptions) {
         localStorage.setItem(STORAGE_KEY, serialized);
     } catch (err) {
         console.error("Fehler beim Speichern der Abos in localStorage:", err);
+    }
+}
+
+// --- Reminder-Settings (global) ----------------------------------------------
+
+/**
+ * Lädt die globalen Reminder-Einstellungen aus localStorage.
+ * Wird sowohl in der Web-Version als auch später in der Capacitor-App verwendet.
+ */
+function loadReminderSettings() {
+    try {
+        const raw = localStorage.getItem(REMINDER_SETTINGS_KEY);
+        if (!raw) {
+            return { ...defaultReminderSettings };
+        }
+
+        const parsed = JSON.parse(raw);
+        // Weiche Zusammenführung: fehlende Felder werden mit Defaults ergänzt
+        return {
+            ...defaultReminderSettings,
+            ...(parsed && typeof parsed === "object" ? parsed : {})
+        };
+    } catch (err) {
+        console.error("Fehler beim Laden der Reminder-Settings:", err);
+        return { ...defaultReminderSettings };
+    }
+}
+
+/**
+ * Speichert die globalen Reminder-Einstellungen in localStorage.
+ * Diese Funktion bleibt auch mit Capacitor sinnvoll,
+ * weil die App-Einstellungen weiterhin im Web-Teil liegen.
+ */
+function saveReminderSettings(settings) {
+    try {
+        const serialized = JSON.stringify(settings);
+        localStorage.setItem(REMINDER_SETTINGS_KEY, serialized);
+    } catch (err) {
+        console.error("Fehler beim Speichern der Reminder-Settings:", err);
     }
 }
 
@@ -275,7 +379,155 @@ function rebuildCategoryOptions() {
     }
 }
 
+function getEffectiveReminderConfig(sub) {
+    const globalCfg = reminderSettings || defaultReminderSettings;
+    const cfg = sub.reminderConfig || {};
 
+    // Wenn der User für dieses Abo Reminder komplett abgeschaltet hat
+    if (cfg.mode === "off") {
+        return {
+            mode: "off",
+            billingLeadDays: null,
+            renewalLeadDays: null
+        };
+    }
+
+    // "default" und alles Unbekannte → globale Defaults
+    if (cfg.mode !== "custom" && cfg.mode !== "off") {
+        return {
+            mode: "default",
+            billingLeadDays: globalCfg.billingLeadDays,
+            renewalLeadDays: globalCfg.renewalLeadDays
+        };
+    }
+
+    // mode === "custom": pro Abo definierte Werte, mit Fallback auf global
+    const billingLead =
+        typeof cfg.billingLeadDays === "number"
+            ? cfg.billingLeadDays
+            : globalCfg.billingLeadDays;
+
+    const renewalLead =
+        typeof cfg.renewalLeadDays === "number"
+            ? cfg.renewalLeadDays
+            : globalCfg.renewalLeadDays;
+
+    return {
+        mode: "custom",
+        billingLeadDays: billingLead,
+        renewalLeadDays: renewalLead
+    };
+}
+
+/**
+ * Parst ein ISO-Datum im Format "YYYY-MM-DD" in ein Date-Objekt.
+ * Gibt null zurück, wenn der String fehlt oder ungültig ist.
+ * Wird von Reminder-Engine und später von der Capacitor-Schicht genutzt.
+ */
+function parseISODate(dateStr) {
+    if (!dateStr || typeof dateStr !== "string") {
+        return null;
+    }
+
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) {
+        return null;
+    }
+
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    const day = Number(parts[2]);
+
+    if (!year || !month || !day) {
+        return null;
+    }
+
+    // JS-Date: Monate 0–11
+    return new Date(year, month - 1, day);
+}
+
+/**
+ * Formatiert ein Date-Objekt als ISO-Datum "YYYY-MM-DD".
+ * Praktisch, um snoozedUntil usw. im Storage zu speichern.
+ */
+function formatISODate(date) {
+    if (!(date instanceof Date)) {
+        return "";
+    }
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+/**
+ * Gibt eine neue Date-Instanz zurück, die um "days" Tage verschoben ist.
+ * Input-Date bleibt unverändert.
+ */
+function addDays(date, days) {
+    if (!(date instanceof Date)) {
+        return null;
+    }
+    const result = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate() + days
+    );
+    return result;
+}
+
+/**
+ * Kombiniert ein Datum (YYYY-MM-DD) mit einer Uhrzeit "HH:MM".
+ * Nutzt reminderSettings.timeOfDay, damit alle Reminder
+ * zur gleichen Tageszeit eingeplant werden können.
+ */
+function applyTimeOfDay(date, timeOfDay) {
+    if (!(date instanceof Date)) {
+        return null;
+    }
+
+    const timeStr = typeof timeOfDay === "string" && timeOfDay.includes(":")
+        ? timeOfDay
+        : "09:00";
+
+    const parts = timeStr.split(":");
+    const hour = Number(parts[0]) || 9;
+    const minute = Number(parts[1]) || 0;
+
+    return new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        hour,
+        minute,
+        0,
+        0
+    );
+}
+
+/**
+ * Formatiert ein Datum in ein kurzes deutsches Format "DD.MM.YYYY".
+ */
+function formatDateShort(date) {
+    if (!(date instanceof Date)) {
+        return "";
+    }
+
+    const d = String(date.getDate()).padStart(2, "0");
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const y = date.getFullYear();
+
+    return `${d}.${m}.${y}`;
+}
+
+/**
+ * Baut eine stabile Notification-ID für ein Abo + Reminder-Typ.
+ * Wird später von der Capacitor-Schicht verwendet, um
+ * Notifications zu planen / zu aktualisieren / zu löschen.
+ */
+function buildNotificationId(subId, type) {
+    return `${subId}:${type}`;
+}
 
 function ensureCategoryOption(cat) {
     if (!categorySelect || !cat) {
@@ -350,6 +602,283 @@ function deleteSelectedCategory() {
     }
 }
 
+/**
+ * Berechnet den nächsten Abbuchungstermin für ein Abo.
+ * Gibt ein Date-Objekt zurück oder null, wenn kein Termin ableitbar ist.
+ *
+ * Aktuelles Modell:
+ * - monatliche Abos:
+ *     - wenn billingDay gesetzt → fester Tag im Monat (ab Startdatum)
+ *     - sonst: Startdatum + n * month
+ * - alle anderen Zyklen:
+ *     - nur über Startdatum + Zyklus (billingDay wird ignoriert)
+ */
+function computeNextBillingDate(sub, today = new Date()) {
+    const start = parseISODate(sub.startDate);
+    if (!start) {
+        return null;
+    }
+
+    const cycle = sub.cycle || "monthly";
+    const billingDay = sub.billingDay ? Number(sub.billingDay) : null;
+
+    // Nur für monatliche Abos einen festen Tag im Monat nutzen
+    if (cycle === "monthly" && billingDay && Number.isInteger(billingDay)) {
+        return computeNextMonthlyBillingDate(start, billingDay, today);
+    }
+
+    // Alle anderen Zyklen (daily, weekly, quarterly, yearly, …)
+    // werden rein aus Startdatum + Zyklus berechnet.
+    return computeNextByCycle(start, cycle, today);
+}
+
+/**
+ * Nächster Abbuchungstermin für ein monatliches Abo
+ * mit festem Tag im Monat (billingDay), ab Startdatum.
+ */
+function computeNextMonthlyBillingDate(start, billingDay, today) {
+    let year = today.getFullYear();
+    let month = today.getMonth();
+
+    // Kandidat: aktueller Monat am billingDay
+    let candidate = new Date(year, month, billingDay);
+
+    // Falls vor "heute" → nächsten Monat
+    if (candidate < today) {
+        month += 1;
+        candidate = new Date(year, month, billingDay);
+    }
+
+    // Sicherstellen, dass wir nicht vor dem Startdatum liegen
+    while (candidate < start) {
+        month += 1;
+        candidate = new Date(year, month, billingDay);
+    }
+
+    return candidate;
+}
+
+/**
+ * Nächster Termin basierend auf Startdatum + Zyklus.
+ */
+function computeNextByCycle(start, cycle, today) {
+    const next = new Date(start.getTime());
+
+    // Wenn Startdatum bereits in der Zukunft → ist es der nächste Termin
+    if (next > today) {
+        return next;
+    }
+
+    // Sonst so lange addieren, bis wir in der Zukunft sind
+    while (next <= today) {
+        switch (cycle) {
+            case "daily":
+                next.setDate(next.getDate() + 1);
+                break;
+
+            case "weekly":
+                next.setDate(next.getDate() + 7);
+                break;
+
+            case "monthly":
+                next.setMonth(next.getMonth() + 1);
+                break;
+
+            case "quarterly":
+                next.setMonth(next.getMonth() + 3);
+                break;
+
+            case "yearly":
+                next.setFullYear(next.getFullYear() + 1);
+                break;
+
+            default:
+                next.setMonth(next.getMonth() + 1);
+                break;
+        }
+    }
+
+    return next;
+}
+
+/**
+ * Berechnet das nächste Verlängerungs-/Ablaufdatum auf Basis von endDate.
+ * Gibt ein Date-Objekt zurück oder null, wenn kein sinnvolles Datum existiert.
+ */
+function computeNextRenewalDate(sub, today = new Date()) {
+    const end = parseISODate(sub.endDate);
+    if (!end) {
+        return null;
+    }
+
+    // Wenn das Enddatum in der Vergangenheit oder heute liegt:
+    // keine Verlängerungs-Erinnerung mehr planen.
+    if (end <= today) {
+        return null;
+    }
+
+    return end;
+}
+
+/**
+ * Berechnet den nächsten Reminder für ein Abo.
+ * Gibt ein Objekt:
+ *  {
+ *      subId,
+ *      type,           // "billing" | "renewal"
+ *      triggerAt,      // Date
+ *      notificationId, // string
+ *      title,          // string
+ *      body            // string
+ *  }
+ * oder null zurück, wenn aktuell kein Reminder nötig ist.
+ */
+function getNextReminderForSub(sub, today = new Date()) {
+    // Inaktive Abos aktuell komplett von Erinnerungen ausschließen.
+    if (!sub.active) {
+        return null;
+    }
+
+    const effectiveCfg = getEffectiveReminderConfig(sub);
+    if (effectiveCfg.mode === "off") {
+        return null;
+    }
+
+    const billingDate = computeNextBillingDate(sub, today);
+    const renewalDate = computeNextRenewalDate(sub, today);
+
+    const candidates = [];
+
+    // --- Billing-Reminder ---------------------------------------------------
+    if (billingDate &&
+        typeof effectiveCfg.billingLeadDays === "number" &&
+        effectiveCfg.billingLeadDays >= 0) {
+
+        const remindDate = addDays(billingDate, -effectiveCfg.billingLeadDays);
+
+        // Nur zukünftige Reminder berücksichtigen
+        if (remindDate && remindDate >= today) {
+            candidates.push({
+                type: "billing",
+                eventDate: billingDate,
+                reminderDate: remindDate
+            });
+        }
+    }
+
+    // --- Renewal-Reminder ---------------------------------------------------
+    if (renewalDate &&
+        typeof effectiveCfg.renewalLeadDays === "number" &&
+        effectiveCfg.renewalLeadDays >= 0) {
+
+        const remindDate = addDays(renewalDate, -effectiveCfg.renewalLeadDays);
+
+        if (remindDate && remindDate >= today) {
+            candidates.push({
+                type: "renewal",
+                eventDate: renewalDate,
+                reminderDate: remindDate
+            });
+        }
+    }
+
+    if (candidates.length === 0) {
+        return null;
+    }
+
+    // Frühesten Reminder auswählen
+    candidates.sort((a, b) => a.reminderDate - b.reminderDate);
+    const chosen = candidates[0];
+
+    const triggerAt = applyTimeOfDay(
+        chosen.reminderDate,
+        (reminderSettings && reminderSettings.timeOfDay) || defaultReminderSettings.timeOfDay
+    );
+
+    const notificationId = buildNotificationId(sub.id, chosen.type);
+
+    const cycleLabel = (cycles.find((c) => c.value === sub.cycle) || {}).label || sub.cycle;
+    const amountPerCycle = money(sub.amount);
+    const eventDateLabel = formatDateShort(chosen.eventDate);
+    const name = sub.name || "Abo";
+
+    let title = "";
+    let body = "";
+
+    if (chosen.type === "billing") {
+        title = `${name}: Abbuchung bald fällig`;
+        body = `${amountPerCycle} ${cycleLabel}, Termin am ${eventDateLabel}.`;
+    } else if (chosen.type === "renewal") {
+        title = `${name}: Vertrag läuft bald aus`;
+        body = `Vertragsende am ${eventDateLabel}. Bitte rechtzeitig prüfen oder kündigen.`;
+    }
+
+    return {
+        subId: sub.id,
+        type: chosen.type,
+        triggerAt,
+        notificationId,
+        title,
+        body
+    };
+}
+
+/**
+ * Berechnet alle anstehenden Reminder für alle Abos.
+ * Gibt ein Array von Events zurück, sortiert nach triggerAt.
+ */
+function computeAllReminders(today = new Date()) {
+    const events = subs
+        .map((s) => getNextReminderForSub(s, today))
+        .filter((evt) => !!evt);
+
+    // Nach Trigger-Zeit sortieren (früheste zuerst)
+    events.sort((a, b) => a.triggerAt - b.triggerAt);
+
+    return events;
+}
+
+/**
+ * DEV ONLY --- KANN SPÄTER GELÖSCHT WERDEN --- :
+ * Gibt alle aktuell berechneten Reminder-Events in der Konsole aus.
+ * Diese Funktion kann im normalen Betrieb entfernt oder deaktiviert werden.
+ */
+function logUpcomingReminders() {
+    const today = new Date();
+    const events = computeAllReminders(today);
+
+    console.group("AboChecker – geplante Reminder");
+
+    // hübsche, menschenlesbare Übersicht
+    events.forEach((evt) => {
+        const localDate = evt.triggerAt.toLocaleDateString("de-DE");
+        const localTime = evt.triggerAt.toLocaleTimeString("de-DE", {
+            hour: "2-digit",
+            minute: "2-digit"
+        });
+
+        console.log(
+            `[${evt.type}]`,
+            `am ${localDate} um ${localTime}`,
+            `→ ${evt.title} – ${evt.body}`
+        );
+    });
+
+    // zusätzlich weiterhin die strukturierte Tabelle für Nerd-Blick
+    console.table(
+        events.map((evt) => ({
+            subId: evt.subId,
+            type: evt.type,
+            triggerAtISO: evt.triggerAt.toISOString(),
+            triggerAtLocal: evt.triggerAt.toLocaleString("de-DE"),
+            title: evt.title,
+            body: evt.body,
+            notificationId: evt.notificationId
+        }))
+    );
+
+    console.groupEnd();
+}
 
 
 // --- State -------------------------------------------------------------------
@@ -367,6 +896,8 @@ let isFilterPanelOpen = false;
 // Sortier-States
 let sortBy = "name";            // "name" | "price" | später: "nextDue"
 let sortDir = "asc";            // "asc" | "desc"
+// globale Reminder-Einstellungen im Speicher
+let reminderSettings = { ...defaultReminderSettings };
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel           = document.getElementById("panel");
@@ -418,6 +949,12 @@ const filterResetBtn       = document.getElementById("filterResetBtn");
 const sortSelect      = document.getElementById("sortSelect");
 const sortDirBtn      = document.getElementById("sortDirBtn");
 
+const reminderBillingInput  = document.getElementById("reminderBillingInput");
+const reminderRenewalInput  = document.getElementById("reminderRenewalInput");
+const reminderTimeInput     = document.getElementById("reminderTimeInput");
+const reminderSettingsToggle = document.getElementById("reminderSettingsToggle");
+const reminderSettingsPanel  = document.getElementById("reminderSettingsPanel");
+
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     // zuerst aus Storage laden
@@ -426,8 +963,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // dann UI initialisieren
     init();
 
-    // und einmal vollständig rendern
+    // einmal vollständig rendern
     render();
+
+    // DEV-ONLY: Reminder in der Konsole prüfen
+    logUpcomingReminders(); //kann bei overload auskommentiert werden!
 });
 
 
@@ -438,6 +978,9 @@ function init() {
         displayCycle = storedDisplay;
     }
     updateDisplayTexts();
+    
+    //Reminder-Settings aus Storage laden
+    reminderSettings = loadReminderSettings();
 
     // cycle options
     cycleSelect.innerHTML = cycles
@@ -455,6 +998,20 @@ function init() {
 
     // Theme initialisieren
     initTheme();
+
+    // Reminder-Settings-UI initialisieren
+    initReminderSettingsUI();
+
+    // Reminder-Settings-Panel ein-/ausklappen
+    if (reminderSettingsToggle && reminderSettingsPanel) {
+        // Start: zugeklappt
+        setReminderPanelOpen(false);
+
+        reminderSettingsToggle.addEventListener("click", () => {
+            const isOpen = reminderSettingsPanel.classList.contains("menu__subpanel--open");
+            setReminderPanelOpen(!isOpen);
+        });
+    }
 
     // events
     fab.addEventListener("click", () => {
@@ -530,7 +1087,7 @@ function init() {
             render();
         });
     }
-        // Klicks auf Menüeinträge
+    // Klicks auf Menüeinträge schließen menü und führen Aktion aus
     menu.addEventListener("click", (event) => {
         const btn = event.target.closest(".menu__item");
         if (!btn) {
@@ -538,8 +1095,14 @@ function init() {
         }
 
         const action = btn.dataset.menuAction;
+        // Nur echte Menü-Aktionen behandeln, nicht den Reminder-Toggle
+        if (!action) {
+            return;
+        }
+
         handleMenuAction(action);
     });
+
 
     // Kategorie hinzufügen
     if (categoryAddBtn && categorySelect) {
@@ -623,6 +1186,53 @@ function init() {
 
     // Startbefüllung Kategorie-Select aus bestehenden Abos
     rebuildCategoryOptions();
+}
+
+function initReminderSettingsUI() {
+    if (reminderBillingInput) {
+        reminderBillingInput.value = String(reminderSettings.billingLeadDays ?? defaultReminderSettings.billingLeadDays);
+        reminderBillingInput.addEventListener("change", () => {
+            const val = Number(reminderBillingInput.value);
+            reminderSettings.billingLeadDays =
+                Number.isFinite(val) && val >= 0
+                    ? val
+                    : defaultReminderSettings.billingLeadDays;
+
+            reminderBillingInput.value = String(reminderSettings.billingLeadDays);
+            saveReminderSettings(reminderSettings);
+        });
+    }
+
+    if (reminderRenewalInput) {
+        reminderRenewalInput.value = String(reminderSettings.renewalLeadDays ?? defaultReminderSettings.renewalLeadDays);
+        reminderRenewalInput.addEventListener("change", () => {
+            const val = Number(reminderRenewalInput.value);
+            reminderSettings.renewalLeadDays =
+                Number.isFinite(val) && val >= 0
+                    ? val
+                    : defaultReminderSettings.renewalLeadDays;
+
+            reminderRenewalInput.value = String(reminderSettings.renewalLeadDays);
+            saveReminderSettings(reminderSettings);
+        });
+    }
+
+    if (reminderTimeInput) {
+        const timeValue = reminderSettings.timeOfDay || defaultReminderSettings.timeOfDay;
+        reminderTimeInput.value = timeValue;
+
+        reminderTimeInput.addEventListener("change", () => {
+            const val = reminderTimeInput.value || "";
+            // simple validation: muss "HH:MM" enthalten
+            reminderSettings.timeOfDay =
+                typeof val === "string" && val.includes(":")
+                    ? val
+                    : defaultReminderSettings.timeOfDay;
+
+            reminderTimeInput.value = reminderSettings.timeOfDay;
+            saveReminderSettings(reminderSettings);
+        });
+    }
 }
 
 function handleMenuAction(action) {
@@ -829,7 +1439,6 @@ function onSubmit(e) {
                 : s
         );
     } else {
-        // Neu
         subs = [
             {
                 id: uuid(),
@@ -843,11 +1452,26 @@ function onSubmit(e) {
                 endDate,
                 billingDay,
                 note,
-                active
+                active,
+
+                // Reminder-Konfiguration für dieses Abo
+                reminderConfig: {
+                    mode: "default",       // nutzt globale Settings
+                    billingLeadDays: null, // null = globaler Standard
+                    renewalLeadDays: null
+                },
+
+                // Reminder-Status (wird von der App / Capacitor gepflegt)
+                reminderState: {
+                    snoozedUntil: null,
+                    lastNotifiedAt: null,
+                    lastNotificationType: null
+                }
             },
             ...subs
         ];
     }
+
 
     resetForm();
     openForm(false);
@@ -1011,6 +1635,11 @@ function openMenu(open) {
     const isOpen = !!open;
     menu.classList.toggle("menu--open", isOpen);
     menuOverlay.classList.toggle("menu-overlay--visible", isOpen);
+
+    if (!isOpen) {
+        // Reminder-Panel beim Schließen des Menüs einklappen
+        setReminderPanelOpen(false);
+    }
 }
 
 // --- Helpers -----------------------------------------------------------------
@@ -1021,6 +1650,23 @@ function updateSortDirButtonIcon() {
     }
     // ↑ = aufsteigend, ↓ = absteigend
     sortDirBtn.textContent = sortDir === "asc" ? "↑" : "↓";
+}
+
+function setReminderPanelOpen(isOpen) {
+    if (!reminderSettingsPanel) {
+        return;
+    }
+    reminderSettingsPanel.classList.toggle("menu__subpanel--open", isOpen);
+    updateReminderSettingsToggleLabel(isOpen);
+}
+
+function updateReminderSettingsToggleLabel(isOpen) {
+    if (!reminderSettingsToggle) {
+        return;
+    }
+    reminderSettingsToggle.textContent = isOpen
+        ? "Erinnerungen ▴"
+        : "Erinnerungen ▾";
 }
 
 function escapeHTML(str) {

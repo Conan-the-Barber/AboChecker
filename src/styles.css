@@ -441,6 +441,37 @@ button img {
   border-color: var(--color-danger);
 }
 
+.menu__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.menu__field span {
+  opacity: 0.8;
+  font-size: 0.8rem;
+}
+
+.menu__subpanel {
+  display: none;
+  margin-top: 0.5rem;
+  gap: 0.5rem;
+}
+
+.menu__subpanel--open {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Optional: kleinerer Button-Stil für Unter-Toggles */
+.menu__item--subtoggle {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
 .category-control {
   display: flex;
   gap: 6px;
