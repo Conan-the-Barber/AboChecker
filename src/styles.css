@@ -515,14 +515,31 @@ button img {
   padding: 14px;
 }
 
-.field {
-  display: grid;
-  gap: 6px;
-}
-
 .fieldgroup {
   display: grid;
   gap: 10px;
+}
+
+@media (min-width: 520px) {
+  .fieldgroup {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+/* Kleine Inline-Variante für zwei Spalten (z. B. custom Reminder-Vorlauf) */
+.fieldgroup--inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* Details für Abo-spezifische Reminder-Einstellungen */
+.field--reminderDetails {
+  font-size: 12px;
+}
+
+/* Custom-Felder standardmäßig verstecken – werden per JS ein-/ausgeblendet */
+#reminderCustomFields {
+  display: none;
 }
 
 @media (min-width: 520px) {

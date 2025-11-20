@@ -1056,6 +1056,11 @@ const reminderTimeInput     = document.getElementById("reminderTimeInput");
 const reminderSettingsToggle = document.getElementById("reminderSettingsToggle");
 const reminderSettingsPanel  = document.getElementById("reminderSettingsPanel");
 
+const reminderModeSelect          = document.getElementById("reminderMode");
+const reminderCustomWrapper       = document.getElementById("reminderCustomFields");
+const reminderBillingCustomInput  = document.getElementById("reminderBillingCustom");
+const reminderRenewalCustomInput  = document.getElementById("reminderRenewalCustom");
+
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     // zuerst aus Storage laden
@@ -1283,6 +1288,15 @@ function init() {
             updateSortDirButtonIcon();
             render();
         });
+    }
+
+        // Reminder-Mode im Formular
+    if (reminderModeSelect) {
+        reminderModeSelect.addEventListener("change", () => {
+            updateReminderModeUI();
+        });
+        // Startzustand
+        updateReminderModeUI();
     }
 
     // Startbefüllung Kategorie-Select aus bestehenden Abos
@@ -1515,6 +1529,41 @@ function onSubmit(e) {
 
     const active = !!activeChk.checked;
 
+    // --- Reminder-Formwerte einsammeln -------------------------------------
+    let reminderMode = "default";
+    let customBillingDays = null;
+    let customRenewalDays = null;
+
+    if (reminderModeSelect) {
+        reminderMode = reminderModeSelect.value || "default";
+    }
+
+    if (reminderMode === "custom") {
+        if (reminderBillingCustomInput) {
+            const v = Number(reminderBillingCustomInput.value);
+            if (Number.isFinite(v) && v >= 0) {
+                customBillingDays = v;
+            }
+        }
+        if (reminderRenewalCustomInput) {
+            const v = Number(reminderRenewalCustomInput.value);
+            if (Number.isFinite(v) && v >= 0) {
+                customRenewalDays = v;
+            }
+        }
+    }
+
+    if (!name || !isFinite(amount) || amount <= 0) {
+        return;
+    }
+
+    const newReminderConfig = {
+        mode: reminderMode,              // "default" | "custom" | "off"
+        billingLeadDays: customBillingDays,
+        renewalLeadDays: customRenewalDays
+    };
+
+
     if (!name || !isFinite(amount) || amount <= 0) {
         return;
     }
@@ -1535,11 +1584,17 @@ function onSubmit(e) {
                     endDate,
                     billingDay,
                     note,
-                    active
+                    active,
+                    // Reminder-Konfiguration aktualisieren
+                    reminderConfig: {
+                        ...(s.reminderConfig || {}),
+                        ...newReminderConfig
+                    }
                 }
                 : s
         );
     } else {
+        // Neu
         subs = [
             {
                 id: uuid(),
@@ -1556,11 +1611,7 @@ function onSubmit(e) {
                 active,
 
                 // Reminder-Konfiguration für dieses Abo
-                reminderConfig: {
-                    mode: "default",       // nutzt globale Settings
-                    billingLeadDays: null, // null = globaler Standard
-                    renewalLeadDays: null
-                },
+                reminderConfig: newReminderConfig,
 
                 // Reminder-Status (wird von der App / Capacitor gepflegt)
                 reminderState: {
@@ -1573,11 +1624,14 @@ function onSubmit(e) {
         ];
     }
 
-
     resetForm();
     openForm(false);
     render();
+
+    // DEV ONLY: zur Kontrolle der Reminder-Engine
+    logUpcomingReminders(); // bei Bedarf auskommentieren
 }
+
 
 function setFormMode(mode) {
     formMode = mode;
@@ -1662,6 +1716,25 @@ function startEdit(id) {
 
     activeChk.checked = !!s.active;
 
+    // --- Reminder-Formular mit Abo-spezifischen Einstellungen befüllen -----
+    const cfg = s.reminderConfig || {};
+
+    if (reminderModeSelect) {
+        const mode = (cfg.mode === "custom" || cfg.mode === "off") ? cfg.mode : "default";
+        reminderModeSelect.value = mode;
+    }
+
+    if (reminderBillingCustomInput) {
+        reminderBillingCustomInput.value =
+            typeof cfg.billingLeadDays === "number" ? String(cfg.billingLeadDays) : "";
+    }
+
+    if (reminderRenewalCustomInput) {
+        reminderRenewalCustomInput.value =
+            typeof cfg.renewalLeadDays === "number" ? String(cfg.renewalLeadDays) : "";
+    }
+
+    updateReminderModeUI();
     setFormMode("view");
     openForm(true);
 }
@@ -1685,8 +1758,19 @@ function resetForm() {
     billingDayInput.value = "";
     noteInput.value       = "";
 
+    if (reminderModeSelect) {
+        reminderModeSelect.value = "default";
+    }
+    if (reminderBillingCustomInput) {
+        reminderBillingCustomInput.value = "";
+    }
+    if (reminderRenewalCustomInput) {
+        reminderRenewalCustomInput.value = "";
+    }
+    updateReminderModeUI();
     setFormMode("new");
 }
+
 
 
 function removeSub(id) {
@@ -1768,6 +1852,21 @@ function updateReminderSettingsToggleLabel(isOpen) {
     reminderSettingsToggle.textContent = isOpen
         ? "Erinnerungen ▴"
         : "Erinnerungen ▾";
+}
+
+/**
+ * Blendet die Custom-Felder im Abo-Formular ein/aus,
+ * abhängig vom gewählten reminderMode.
+ */
+function updateReminderModeUI() {
+    if (!reminderModeSelect || !reminderCustomWrapper) {
+        return;
+    }
+
+    const mode = reminderModeSelect.value || "default";
+    const showCustom = mode === "custom";
+
+    reminderCustomWrapper.style.display = showCustom ? "block" : "none";
 }
 
 function escapeHTML(str) {
