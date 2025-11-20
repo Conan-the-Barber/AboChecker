@@ -364,6 +364,9 @@ let statusFilter = "all";       // all | active | inactive
 let cycleFilter = "all";        // all | daily | weekly | ...
 let categoryFilter = "all";     // all | none | <kategorie>
 let isFilterPanelOpen = false;
+// Sortier-States
+let sortBy = "name";            // "name" | "price" | später: "nextDue"
+let sortDir = "asc";            // "asc" | "desc"
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel           = document.getElementById("panel");
@@ -411,6 +414,9 @@ const statusFilterSelect   = document.getElementById("statusFilter");
 const cycleFilterSelect    = document.getElementById("cycleFilter");
 const categoryFilterSelect = document.getElementById("categoryFilter");
 const filterResetBtn       = document.getElementById("filterResetBtn");
+
+const sortSelect      = document.getElementById("sortSelect");
+const sortDirBtn      = document.getElementById("sortDirBtn");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -596,6 +602,25 @@ function init() {
         });
     }
 
+    // Sortierung: Kriterium
+    if (sortSelect) {
+        sortSelect.value = sortBy;
+        sortSelect.addEventListener("change", (e) => {
+            sortBy = e.target.value || "name";
+            render();
+        });
+    }
+
+    // Sortierung: Richtung
+    if (sortDirBtn) {
+        updateSortDirButtonIcon();
+        sortDirBtn.addEventListener("click", () => {
+            sortDir = sortDir === "asc" ? "desc" : "asc";
+            updateSortDirButtonIcon();
+            render();
+        });
+    }
+
     // Startbefüllung Kategorie-Select aus bestehenden Abos
     rebuildCategoryOptions();
 }
@@ -661,6 +686,36 @@ function render() {
                 .toLowerCase();
 
             return haystack.includes(term);
+        });
+    }
+
+    // --- Sortierung ---------------------------------------------------------
+    if (visibleSubs.length > 1) {
+        visibleSubs = visibleSubs.slice(); // Kopie, um Original nicht zu verändern
+
+        visibleSubs.sort((a, b) => {
+            if (sortBy === "name") {
+                const nameA = (a.name || "").toLowerCase();
+                const nameB = (b.name || "").toLowerCase();
+                if (nameA < nameB) return sortDir === "asc" ? -1 : 1;
+                if (nameA > nameB) return sortDir === "asc" ? 1 : -1;
+                return 0;
+            }
+
+            if (sortBy === "price") {
+                const priceA = toDisplayUnit(a.amount, a.cycle, displayCycle);
+                const priceB = toDisplayUnit(b.amount, b.cycle, displayCycle);
+                if (priceA < priceB) return sortDir === "asc" ? -1 : 1;
+                if (priceA > priceB) return sortDir === "asc" ? 1 : -1;
+                return 0;
+            }
+
+            // Default-Fallback: Name
+            const nameA = (a.name || "").toLowerCase();
+            const nameB = (b.name || "").toLowerCase();
+            if (nameA < nameB) return sortDir === "asc" ? -1 : 1;
+            if (nameA > nameB) return sortDir === "asc" ? 1 : -1;
+            return 0;
         });
     }
 
@@ -958,8 +1013,16 @@ function openMenu(open) {
     menuOverlay.classList.toggle("menu-overlay--visible", isOpen);
 }
 
-
 // --- Helpers -----------------------------------------------------------------
+//Sortierungsaktualisierung
+function updateSortDirButtonIcon() {
+    if (!sortDirBtn) {
+        return;
+    }
+    // ↑ = aufsteigend, ↓ = absteigend
+    sortDirBtn.textContent = sortDir === "asc" ? "↑" : "↓";
+}
+
 function escapeHTML(str) {
 return String(str)
     .replaceAll("&", "&amp;")

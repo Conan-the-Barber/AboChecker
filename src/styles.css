@@ -79,7 +79,7 @@ html[data-theme=dark] {
 }
 
 .listToolbar__search {
-  flex: 1 1 180px;
+  flex: 1 1 auto;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
@@ -164,6 +164,38 @@ button img {
   padding: 4px 0 6px;
   align-self: flex-end;
   color: var(--color-text-muted);
+}
+
+.listToolbar__sort {
+  flex: 0 0 auto;
+  width: 90px;
+  max-width: 130px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+  color: var(--color-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.listToolbar__sortDir {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+  color: var(--color-text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.listToolbar__sortDir:hover {
+  filter: brightness(0.97);
 }
 
 .list__head {

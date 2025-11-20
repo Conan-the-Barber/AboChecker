@@ -104,7 +104,7 @@
 
           <div class="fieldgroup">
             <label class="field">
-              <span>Betrag</span>
+              <span>Betrag in €</span>
               <input
                 id="amount"
                 type="number"
@@ -171,8 +171,24 @@
                 id="searchInput"
                 class="listToolbar__search"
                 type="search"
-                placeholder="Suchen nach Name, Anbieter, Kategorie…"
+                placeholder="Suchen..."
             />
+
+            <select id="sortSelect" class="listToolbar__sort">
+                <option value="name">Name</option>
+                <option value="price">Preis</option>
+                <!-- später: <option value="nextDue">Sortierung: nächste Fälligkeit</option> -->
+            </select>
+
+            <button
+                id="sortDirBtn"
+                class="listToolbar__sortDir"
+                type="button"
+                aria-label="Sortierreihenfolge umschalten"
+            >
+                ↑
+            </button>
+
             <button
                 id="filterToggleBtn"
                 class="listToolbar__filterBtn"
