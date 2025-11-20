@@ -722,6 +722,9 @@ function computeNextRenewalDate(sub, today = new Date()) {
 
 /**
  * Berechnet den nächsten Reminder für ein Abo.
+ * - Snooze (sub.reminderState.snoozedUntil) kann den normalen LeadDay übersteuern.
+ * - lastNotifiedAt / lastNotificationType verhindern doppelte Reminder
+ *
  * Gibt ein Objekt:
  *  {
  *      subId,
@@ -747,40 +750,56 @@ function getNextReminderForSub(sub, today = new Date()) {
     const billingDate = computeNextBillingDate(sub, today);
     const renewalDate = computeNextRenewalDate(sub, today);
 
+    const state = sub.reminderState || {};
+    const snoozedUntil = parseISODate(state.snoozedUntil);
+
     const candidates = [];
 
-    // --- Billing-Reminder ---------------------------------------------------
-    if (billingDate &&
-        typeof effectiveCfg.billingLeadDays === "number" &&
-        effectiveCfg.billingLeadDays >= 0) {
-
-        const remindDate = addDays(billingDate, -effectiveCfg.billingLeadDays);
-
-        // Nur zukünftige Reminder berücksichtigen
-        if (remindDate && remindDate >= today) {
-            candidates.push({
-                type: "billing",
-                eventDate: billingDate,
-                reminderDate: remindDate
-            });
+    /**
+     * Hilfsfunktion: baut einen Reminder-Kandidaten für einen bestimmten Typ.
+     * - eventDate: tatsächlicher Fälligkeitstermin (Abbuchung / Vertragsende)
+     * - leadDays: Vorlauf in Tagen
+     *
+     * Snooze-Regel:
+     *   Wenn snoozedUntil gesetzt ist, in der Zukunft liegt und nicht hinter dem Ereignisdatum,
+     *   dann wird dieser Tag als Reminder-Datum verwendet, statt eventDate - leadDays.
+     */
+    function pushCandidate(type, eventDate, leadDays) {
+        if (!eventDate || typeof leadDays !== "number" || leadDays < 0) {
+            return;
         }
+
+        // "normales" Reminder-Datum (z. B. 3 Tage vor Fälligkeit)
+        const leadReminderDate = addDays(eventDate, -leadDays);
+
+        let reminderDate = leadReminderDate;
+
+        // Snooze: gewinnt gegenüber LeadDay, solange sinnvoll
+        if (
+            snoozedUntil &&
+            snoozedUntil >= today &&
+            snoozedUntil <= eventDate
+        ) {
+            reminderDate = snoozedUntil;
+        }
+
+        // Nur Reminder in der Zukunft berücksichtigen
+        if (!reminderDate || reminderDate < today) {
+            return;
+        }
+
+        candidates.push({
+            type,
+            eventDate,
+            reminderDate
+        });
     }
 
-    // --- Renewal-Reminder ---------------------------------------------------
-    if (renewalDate &&
-        typeof effectiveCfg.renewalLeadDays === "number" &&
-        effectiveCfg.renewalLeadDays >= 0) {
+    // Billing-Reminder (Zahlung)
+    pushCandidate("billing", billingDate, effectiveCfg.billingLeadDays);
 
-        const remindDate = addDays(renewalDate, -effectiveCfg.renewalLeadDays);
-
-        if (remindDate && remindDate >= today) {
-            candidates.push({
-                type: "renewal",
-                eventDate: renewalDate,
-                reminderDate: remindDate
-            });
-        }
-    }
+    // Renewal-Reminder (Vertragsende / Verlängerung)
+    pushCandidate("renewal", renewalDate, effectiveCfg.renewalLeadDays);
 
     if (candidates.length === 0) {
         return null;
@@ -789,6 +808,16 @@ function getNextReminderForSub(sub, today = new Date()) {
     // Frühesten Reminder auswählen
     candidates.sort((a, b) => a.reminderDate - b.reminderDate);
     const chosen = candidates[0];
+
+    // --- Duplicate-Check: schon für genau dieses Datum + Typ erinnert? -----
+    const chosenReminderISO = formatISODate(chosen.reminderDate);
+    if (
+        state.lastNotificationType === chosen.type &&
+        state.lastNotifiedAt === chosenReminderISO
+    ) {
+        // Für dieses Ereignis / Datum wurde bereits eine Notification verschickt
+        return null;
+    }
 
     const triggerAt = applyTimeOfDay(
         chosen.reminderDate,
@@ -823,6 +852,7 @@ function getNextReminderForSub(sub, today = new Date()) {
     };
 }
 
+
 /**
  * Berechnet alle anstehenden Reminder für alle Abos.
  * Gibt ein Array von Events zurück, sortiert nach triggerAt.
@@ -847,39 +877,110 @@ function logUpcomingReminders() {
     const today = new Date();
     const events = computeAllReminders(today);
 
+    const subById = new Map(subs.map((s) => [s.id, s]));
+
+    // Für einfachere Inspektion in der Dev-Konsole
     console.group("AboChecker – geplante Reminder");
+    console.table(
+        events.map((evt) => {
+            const sub = subById.get(evt.subId);
+            const state = (sub && sub.reminderState) || {};
+            return {
+                subId: evt.subId,
+                type: evt.type,
+                triggerAt: evt.triggerAt.toISOString(),
+                title: evt.title,
+                body: evt.body,
+                notificationId: evt.notificationId,
+                snoozedUntil: state.snoozedUntil || null
+            };
+        })
+    );
+    console.groupEnd();
+}
 
-    // hübsche, menschenlesbare Übersicht
-    events.forEach((evt) => {
-        const localDate = evt.triggerAt.toLocaleDateString("de-DE");
-        const localTime = evt.triggerAt.toLocaleTimeString("de-DE", {
-            hour: "2-digit",
-            minute: "2-digit"
-        });
+// ---------------------------------------------------------------------------
+// DEV ONLY – Reminder-Simulation
+// Diese Funktionen werden später für die Capacitor-Version nicht mehr benötigt.
+// Sie dienen nur der Entwicklung / Debug / Validierung der Reminder-Engine.
+// ---------------------------------------------------------------------------
 
-        console.log(
-            `[${evt.type}]`,
-            `am ${localDate} um ${localTime}`,
-            `→ ${evt.title} – ${evt.body}`
-        );
-    });
+/**
+ * Simuliert alle Reminder, die an einem bestimmten Tag fällig wären.
+ * dateStr = "YYYY-MM-DD"
+ */
+function simulateRemindersFor(dateStr) {
+    const day = parseISODate(dateStr);
+    if (!day) {
+        console.error("simulateRemindersFor: Ungültiges Datum:", dateStr);
+        return;
+    }
 
-    // zusätzlich weiterhin die strukturierte Tabelle für Nerd-Blick
+    const events = subs
+        .map((s) => getNextReminderForSub(s, day))
+        .filter((evt) => evt && formatISODate(evt.triggerAt) === dateStr);
+
+    console.group(`Simulierte Reminder für ${dateStr}`);
     console.table(
         events.map((evt) => ({
             subId: evt.subId,
             type: evt.type,
-            triggerAtISO: evt.triggerAt.toISOString(),
-            triggerAtLocal: evt.triggerAt.toLocaleString("de-DE"),
+            triggerAt: evt.triggerAt.toISOString(),
             title: evt.title,
-            body: evt.body,
-            notificationId: evt.notificationId
+            body: evt.body
         }))
     );
-
     console.groupEnd();
+
+    return events;
 }
 
+/**
+ * Simuliert Reminder für die nächsten N Tage ab heute.
+ */
+function simulateNextNDays(n) {
+    const results = [];
+    const today = new Date();
+
+    console.group(`Reminder-Simulation für die nächsten ${n} Tage`);
+    for (let i = 0; i < n; i++) {
+        const day = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate() + i
+        );
+        const dateStr = formatISODate(day);
+
+        const events = simulateRemindersFor(dateStr);
+        if (events && events.length > 0) {
+            results.push({ date: dateStr, events });
+        }
+    }
+    console.groupEnd();
+
+    return results;
+}
+
+/**
+ * Globale Testfunktion für die Browser-Konsole.
+ * Beispiel:
+ *   testReminders("2025-12-01");
+ *   testReminders(30); // nächste 30 Tage
+ */
+window.testReminders = function(arg) {
+    if (typeof arg === "string") {
+        return simulateRemindersFor(arg);
+    }
+
+    if (typeof arg === "number" && arg > 0) {
+        return simulateNextNDays(arg);
+    }
+
+    console.error("testReminders: Bitte Datum (YYYY-MM-DD) oder Anzahl Tage angeben");
+};
+// ---------------------------------------------------------------------------
+//Ab hier wieder normale App-Funktionen
+// ---------------------------------------------------------------------------
 
 // --- State -------------------------------------------------------------------
 // {id, name, provider, category, amount, cycle, startDate, billingDay, endDate, note, debit, active}
