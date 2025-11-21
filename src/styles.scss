@@ -544,7 +544,15 @@ button img {
 
 // --- Panel / Formular ----------------------------
 
-.form { display: grid; gap: 10px; padding: 14px; }
+.form { 
+/*     display: grid;  */
+/*     gap: 10px;  */
+/*     padding: 14px;  */
+    padding: 1.5rem 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
 
 .fieldgroup {
     display: grid;
@@ -592,20 +600,161 @@ input, select, textarea {
 
 .panel {
     position: fixed;
-    inset: 0;                       // top:0; right:0; bottom:0; left:0;
-    background: var(--color-bg-panel);
+    inset: 0;
     z-index: 1000;
 
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -10px 30px rgba(0,0,0,.08);
 
-    // Startzustand: unterhalb des Viewports
     transform: translateY(100%);
     transition: transform .25s ease;
 
     overflow-y: auto;
     padding: 14px 16px 16px;
+
+    // WICHTIG: ans Theme koppeln
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+    border-left: 1px solid var(--color-border);
+
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto; // zentriert auf größeren Screens
 }
+
+/* --- Panel / Formular-Layout ---------------------------------------- */
+
+/* Titel oben im Panel */
+.form__title {
+    margin: 0 0 0.5rem;
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+/* Sektionen im Formular */
+.form__section {
+    padding: 1rem 0 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.form__section:last-of-type {
+    border-bottom: none;
+}
+
+.form__sectionTitle {
+    margin: 0 0 0.75rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+}
+
+/* Fields (Label + Input) */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    position: relative; // nötig für das ::after-Label
+}
+
+.field > span {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.7;
+}
+
+/* Eine Zeile mit mehreren Controls, z.B. Kategorie + Buttons */
+.field__row {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+/* Inputs / Selects / Textareas vereinheitlichen */
+.field input,
+.field select,
+.field textarea {
+    width: 100%;
+    border-radius: 0.6rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-panel);
+    color: var(--color-text);
+    padding: 0.55rem 0.75rem;
+    font: inherit;
+    outline: none;
+    transition: border-color 0.15s ease,
+                background-color 0.15s ease,
+                box-shadow 0.15s ease;
+}
+
+.field input:hover,
+.field select:hover,
+.field textarea:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+    border-color: var(--color-accent);
+    background: var(--color-bg);
+    box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4);
+}
+
+.field textarea {
+    min-height: 4.5rem;
+    resize: vertical;
+}
+
+/* "Keine Angabe" im View-Modus leicht abgedunkelt */
+.field.field--no-value > span::after {
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.6;
+    font-size: 0.8rem;
+}
+
+/* Buttons im Panel unten etwas angleichen */
+.panel .btn {
+        border-radius: 999px;
+        padding: 0.5rem 0.9rem;
+        font-size: 0.9rem;
+    }
+
+.panel .btn--ghost {
+background: transparent;
+border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.panel .btn--ghost:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* --- Zweispaltiges Layout ab Tablet-Breite --------------------------- */
+
+@media (min-width: 768px) {
+    .form {
+        gap: 1.75rem;
+    }
+
+    /* Beispiel: zwei Spalten für "Kosten & Zyklus" / "Laufzeit",
+        falls du in diesen Sektionen mehrere .field hast */
+    .form__section--grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.9rem 1rem;
+    }
+
+    .form__section--grid .field {
+        margin-bottom: 0;
+    }
+}
+
 
 .panel.panel--open {
     transform: translateY(0);
@@ -683,13 +832,7 @@ input, select, textarea {
     }
 }
 
-.field {
-  position: relative; // nötig für das ::after-Label
-}
-
-/* Im View-Modus: wenn kein Datum gesetzt ist, "Keine Angabe" anzeigen */
 .panel.panel--view .field--no-value::after {
-    content: "Keine Angabe";
     position: absolute;
     right: 0;
     top: 50%;
