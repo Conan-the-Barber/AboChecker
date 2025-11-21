@@ -672,6 +672,21 @@ input, select, textarea {
   opacity: 0.75;
 }
 
+.field {
+  position: relative;
+}
+
+/* Im View-Modus: wenn kein Datum gesetzt ist, "Keine Angabe" anzeigen */
+.panel.panel--view .field--no-value::after {
+  content: "Keine Angabe";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  opacity: 0.7;
+}
+
 .reminderList {
   display: flex;
   flex-direction: column;

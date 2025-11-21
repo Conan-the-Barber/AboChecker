@@ -1865,11 +1865,10 @@ function setFormMode(mode) {
     const isEdit = mode === "edit";
 
     panel.classList.toggle("panel--view", isView);
-    if (isView) {
-        if (!startDateInput.value) startDateInput.placeholder = "Keine Angabe";
-        if (!endDateInput.value)   endDateInput.placeholder = "Keine Angabe";
-    }
 
+    // Field-Container für Start- und Enddatum holen
+    const startField = startDateInput ? startDateInput.closest(".field") : null;
+    const endField   = endDateInput ? endDateInput.closest(".field") : null;
 
     // alle Eingabefelder im Formular holen
     const controls = form.querySelectorAll("input, select, textarea");
@@ -1885,6 +1884,24 @@ function setFormMode(mode) {
             el.removeAttribute("disabled");
         }
     });
+
+    // "Keine Angabe" optisch markieren, wenn kein Datum gesetzt ist
+    if (isView) {
+        if (startField) {
+            startField.classList.toggle("field--no-value", !startDateInput.value);
+        }
+        if (endField) {
+            endField.classList.toggle("field--no-value", !endDateInput.value);
+        }
+    } else {
+        // beim Verlassen des View-Modus wieder aufräumen
+        if (startField) {
+            startField.classList.remove("field--no-value");
+        }
+        if (endField) {
+            endField.classList.remove("field--no-value");
+        }
+    }
 
     // Buttons:
     // VIEW: Bearbeiten + Abbrechen
