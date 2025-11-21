@@ -520,6 +520,69 @@ function formatDateShort(date) {
     return `${d}.${m}.${y}`;
 }
 
+function formatTimeShort(date) {
+    if (!(date instanceof Date)) {
+        return "";
+    }
+    const h = String(date.getHours()).padStart(2, "0");
+    const m = String(date.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
+}
+
+/**
+ * Liefert den Laufzeit-Status eines Abos auf Basis von startDate / endDate
+ * + manueller Aktiv-Flag (sub.active).
+ *
+ * state:
+ *  - "scheduled" → Startdatum liegt in der Zukunft
+ *  - "ended"     → Enddatum liegt in der Vergangenheit
+ *  - "active"    → innerhalb des Laufzeitfensters, manuell aktiv
+ *  - "paused"    → innerhalb des Laufzeitfensters, manuell pausiert
+ *
+ * effectiveActive:
+ *  - true  → Abo zählt für Summen & Reminder
+ *  - false → Abo zählt aktuell nicht
+ */
+function getSubRuntimeState(sub, today = new Date()) {
+    const manualActive = !!sub.active;
+
+    // Nur das Datum betrachten (ohne Uhrzeit), damit Enddatum "heute" noch zählt.
+    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const start = parseISODate(sub.startDate);
+    const end   = parseISODate(sub.endDate);
+
+    // 1. Start in der Zukunft → geplant
+    if (start && t < start) {
+        return {
+            state: "scheduled",
+            effectiveActive: false
+        };
+    }
+
+    // 2. Enddatum in der Vergangenheit → abgelaufen
+    if (end && t > end) {
+        return {
+            state: "ended",
+            effectiveActive: false
+        };
+    }
+
+    // 3. Im Laufzeitfenster: manuelle Kontrolle
+    if (manualActive) {
+        return {
+            state: "active",
+            effectiveActive: true
+        };
+    }
+
+    // 4. Im Laufzeitfenster, aber pausiert
+    return {
+        state: "paused",
+        effectiveActive: false
+    };
+}
+
 /**
  * Baut eine stabile Notification-ID für ein Abo + Reminder-Typ.
  * Wird später von der Capacitor-Schicht verwendet, um
@@ -737,8 +800,9 @@ function computeNextRenewalDate(sub, today = new Date()) {
  * oder null zurück, wenn aktuell kein Reminder nötig ist.
  */
 function getNextReminderForSub(sub, today = new Date()) {
-    // Inaktive Abos aktuell komplett von Erinnerungen ausschließen.
-    if (!sub.active) {
+    // Inaktive / geplante / abgelaufene Abos aktuell komplett von Erinnerungen ausschließen.
+    const rs = getSubRuntimeState(sub, today);
+    if (!rs.effectiveActive) {
         return null;
     }
 
@@ -852,7 +916,6 @@ function getNextReminderForSub(sub, today = new Date()) {
     };
 }
 
-
 /**
  * Berechnet alle anstehenden Reminder für alle Abos.
  * Gibt ein Array von Events zurück, sortiert nach triggerAt.
@@ -866,6 +929,78 @@ function computeAllReminders(today = new Date()) {
     events.sort((a, b) => a.triggerAt - b.triggerAt);
 
     return events;
+}
+
+function openReminderOverview(open) {
+    if (!reminderOverview) return;
+    const isOpen = !!open;
+    reminderOverview.classList.toggle("panel--open", isOpen);
+
+    if (isOpen) {
+        renderReminderOverview();
+    }
+}
+
+function renderReminderOverview() {
+    if (!reminderOverviewList) return;
+
+    const today = new Date();
+    const events = computeAllReminders(today);
+    const subById = new Map(subs.map((s) => [s.id, s]));
+
+    if (events.length === 0) {
+        reminderOverviewList.innerHTML =
+            `<div class="empty">Aktuell sind keine Erinnerungen geplant.</div>`;
+        return;
+    }
+
+    const html = events
+        .map((evt) => {
+            const sub = subById.get(evt.subId);
+            const name = sub?.name || "Abo";
+            const cycleLabel =
+                (cycles.find((c) => c.value === sub?.cycle) || {}).label || sub?.cycle || "";
+            const amountLabel = sub ? money(sub.amount) : "";
+            const whenDate = formatDateShort(evt.triggerAt);
+            const whenTime = formatTimeShort(evt.triggerAt);
+            const typeLabel = evt.type === "billing" ? "Zahlung" : "Verlängerung";
+
+            return `
+                <div
+                    class="reminderRow"
+                    data-sub-id="${evt.subId}"
+                    data-reminder-type="${evt.type}"
+                    data-notification-id="${evt.notificationId}"
+                >
+                    <div class="reminderRow__main">
+                        <div class="reminderRow__when">${whenDate} · ${whenTime}</div>
+                        <div class="reminderRow__title">${escapeHTML(name)}</div>
+                        <div class="reminderRow__meta">
+                            ${escapeHTML(typeLabel)} · ${escapeHTML(amountLabel)} · ${escapeHTML(cycleLabel || "")}
+                        </div>
+                    </div>
+                    <div class="reminderRow__actions">
+                        <button
+                            type="button"
+                            class="btn btn--small"
+                            data-reminder-action="open"
+                        >
+                            Abo öffnen
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn--small"
+                            data-reminder-action="snooze"
+                        >
+                            Snoozen…
+                        </button>
+                    </div>
+                </div>
+            `;
+        })
+        .join("");
+
+    reminderOverviewList.innerHTML = html;
 }
 
 /**
@@ -898,6 +1033,7 @@ function logUpcomingReminders() {
     );
     console.groupEnd();
 }
+
 
 // ---------------------------------------------------------------------------
 // DEV ONLY – Reminder-Simulation
@@ -1060,6 +1196,9 @@ const reminderModeSelect          = document.getElementById("reminderMode");
 const reminderCustomWrapper       = document.getElementById("reminderCustomFields");
 const reminderBillingCustomInput  = document.getElementById("reminderBillingCustom");
 const reminderRenewalCustomInput  = document.getElementById("reminderRenewalCustom");
+const reminderOverview       = document.getElementById("reminderOverview");
+const reminderOverviewList   = document.getElementById("reminderOverviewList");
+const reminderOverviewClose  = document.getElementById("reminderOverviewClose");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -1118,6 +1257,39 @@ function init() {
             setReminderPanelOpen(!isOpen);
         });
     }
+
+        // Reminder-Übersicht schließen
+    if (reminderOverviewClose) {
+        reminderOverviewClose.addEventListener("click", () => {
+            openReminderOverview(false);
+        });
+    }
+
+    // Aktionen in der Reminder-Übersicht (open / snooze)
+    if (reminderOverview) {
+        reminderOverview.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-reminder-action]");
+            if (!btn) return;
+
+            const action = btn.dataset.reminderAction;
+            const row = btn.closest(".reminderRow");
+            if (!row) return;
+
+            const subId = row.dataset.subId;
+            const type = row.dataset.reminderType;
+
+            if (!subId) return;
+
+            if (action === "open") {
+                // Panel schließen und Abo im Formular anzeigen
+                openReminderOverview(false);
+                startEdit(subId);
+            } else if (action === "snooze") {
+                handleReminderSnooze(subId, type);
+            }
+        });
+    }
+
 
     // events
     fab.addEventListener("click", () => {
@@ -1226,15 +1398,6 @@ function init() {
             isFilterPanelOpen = !isFilterPanelOpen;
             filterPanel.classList.toggle("filterPanel--open", isFilterPanelOpen);
             filterToggleBtn.setAttribute("aria-expanded", isFilterPanelOpen ? "true" : "false");
-        });
-    }
-
-    // Status-Filter
-    if (statusFilterSelect) {
-        statusFilterSelect.value = statusFilter;
-        statusFilterSelect.addEventListener("change", (e) => {
-            statusFilter = e.target.value || "all";
-            render();
         });
     }
 
@@ -1350,6 +1513,43 @@ function initReminderSettingsUI() {
     }
 }
 
+function handleReminderSnooze(subId, type) {
+    const sub = subs.find((s) => s.id === subId);
+    if (!sub) return;
+
+    const today = new Date();
+    const defaultDate = formatISODate(addDays(today, 3) || today);
+
+    const input = window.prompt(
+        "Bis wann soll diese Erinnerung snoozen?\nFormat: YYYY-MM-DD",
+        defaultDate
+    );
+    if (!input) {
+        return;
+    }
+
+    const snoozeDate = parseISODate(input.trim());
+    if (!snoozeDate) {
+        window.alert("Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben.");
+        return;
+    }
+
+    // Reminder-State sicherstellen
+    if (!sub.reminderState || typeof sub.reminderState !== "object") {
+        sub.reminderState = {
+            snoozedUntil: null,
+            lastNotifiedAt: null,
+            lastNotificationType: null
+        };
+    }
+
+    sub.reminderState.snoozedUntil = formatISODate(snoozeDate);
+
+    saveSubscriptions(subs);
+    render();
+    renderReminderOverview();
+}
+
 function handleMenuAction(action) {
     switch (action) {
         case "clear-all":
@@ -1357,15 +1557,10 @@ function handleMenuAction(action) {
             break;
         case "toggle-dark":
             toggleTheme();
-            openMenu(false);
             break;
-/*         case "toggle-display":
-            cycleDisplayMode();
-            break; 
-            ==========================================
-            DEN PUNKT NOCH ANPASSEN DASS MENÜ BEI DROPDOWNTOGGLE SCHLIEßT!!!
-            ==========================================
-            */
+        case "reminder-overview":
+            openReminderOverview(true);
+            break;
         default:
             break;
     }
@@ -1374,15 +1569,20 @@ function handleMenuAction(action) {
     openMenu(false);
 }
 
+
 // --- Rendering ---------------------------------------------------------------
 function render() {
     let visibleSubs = subs;
 
     // --- Status-Filter ------------------------------------------------------
     if (statusFilter === "active") {
-        visibleSubs = visibleSubs.filter((s) => !!s.active);
+        visibleSubs = visibleSubs.filter(
+            (s) => getSubRuntimeState(s).effectiveActive
+        );
     } else if (statusFilter === "inactive") {
-        visibleSubs = visibleSubs.filter((s) => !s.active);
+        visibleSubs = visibleSubs.filter(
+            (s) => !getSubRuntimeState(s).effectiveActive
+        );
     }
 
     // --- Zyklus-Filter ------------------------------------------------------
@@ -1463,11 +1663,30 @@ function render() {
                 const perDisplay = money(toDisplayUnit(s.amount, s.cycle, displayCycle));
                 const debitLabel = s.debit === "manual" ? "manuell" : "automatisch";
 
+                const rs = getSubRuntimeState(s);
+                let statusLabel = "";
+
+                if (rs.state === "scheduled") {
+                    const start = parseISODate(s.startDate);
+                    statusLabel = start ? `Start am ${formatDateShort(start)}` : "Geplant";
+                } else if (rs.state === "paused") {
+                    statusLabel = "Pausiert";
+                } else if (rs.state === "ended") {
+                    const end = parseISODate(s.endDate);
+                    statusLabel = end ? `Endete am ${formatDateShort(end)}` : "Beendet";
+                }
+
+                // Basis-Zeile: Betrag + Zyklus
+                const baseLine = `${money(s.amount)} · ${cycleLabel}`;
+                const subLine  = statusLabel ? `${statusLabel} · ${baseLine}` : baseLine;
+
+                const isDisabled = rs.state === "scheduled" || rs.state === "ended";
+
                 return `
                     <li class="row" data-id="${s.id}">
                         <div class="row__title">
                             <div class="name">${escapeHTML(s.name)}</div>
-                            <div class="sub">${money(s.amount)} · ${cycleLabel}</div>
+                            <div class="sub">${escapeHTML(subLine)}</div>
                         </div>
 
                         <div class="hide-sm">${escapeHTML(debitLabel || "-")}</div>
@@ -1475,7 +1694,12 @@ function render() {
                         <div class="right strong">${perDisplay}</div>
 
                         <div class="center">
-                            <input type="checkbox" data-id="${s.id}" ${s.active ? "checked" : ""} />
+                            <input
+                                type="checkbox"
+                                data-id="${s.id}"
+                                ${rs.effectiveActive ? "checked" : ""}
+                                ${isDisabled ? "disabled" : ""}
+                            />
                         </div>
                     </li>
                 `;
@@ -1483,9 +1707,9 @@ function render() {
             .join("");
     }
 
-    // --- Summen (immer über alle aktiven, NICHT nur gefilterte) ------------
+    // --- Summen (immer über alle mit effectiveActive = true, NICHT nur gefilterte) ------------
     const total = subs
-        .filter((s) => s.active)
+        .filter((s) => getSubRuntimeState(s).effectiveActive)
         .reduce(
             (acc, s) => acc + toDisplayUnit(s.amount, s.cycle, displayCycle),
             0
@@ -1641,6 +1865,11 @@ function setFormMode(mode) {
     const isEdit = mode === "edit";
 
     panel.classList.toggle("panel--view", isView);
+    if (isView) {
+        if (!startDateInput.value) startDateInput.placeholder = "Keine Angabe";
+        if (!endDateInput.value)   endDateInput.placeholder = "Keine Angabe";
+    }
+
 
     // alle Eingabefelder im Formular holen
     const controls = form.querySelectorAll("input, select, textarea");

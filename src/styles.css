@@ -426,6 +426,12 @@ button img {
   border-radius: 10px;
   font-size: 14px;
   cursor: pointer;
+  /* kleine Variante für Reminder-Panel */
+}
+.btn--small {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
 }
 .btn:hover {
   filter: brightness(0.97);
@@ -439,6 +445,10 @@ button img {
   background: var(--color-danger);
   color: #fff;
   border-color: var(--color-danger);
+}
+
+.actions--right {
+  justify-content: flex-end;
 }
 
 .menu__field {
@@ -643,6 +653,68 @@ input, select, textarea {
   background-image: none !important;
   background-color: transparent;
   padding-right: 0;
+}
+
+/* Spezielle Optik für das Reminder-Panel */
+.panel--reminders {
+  /* etwas mehr Luft oben, wirkt wie "Dialog" */
+  padding-top: 18px;
+}
+.panel--reminders .panel__title {
+  margin-top: 0;
+  margin-bottom: 4px;
+  font-size: 18px;
+}
+.panel--reminders .panel__subtitle {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.reminderList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* Einzelner Reminder-Eintrag */
+.reminderRow {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--color-bg-panel);
+}
+
+.reminderRow__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reminderRow__when {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.reminderRow__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.reminderRow__meta {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.reminderRow__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .stickybar {

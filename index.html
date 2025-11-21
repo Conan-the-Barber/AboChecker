@@ -54,6 +54,15 @@
                 </label>
             </div>
           </li>
+          <li>
+            <button
+                class="menu__item"
+                data-menu-action="reminder-overview"
+                type="button"
+            >
+                Erinnerungsübersicht
+            </button>
+          </li>
 
           <li>
               <button class="menu__item" data-menu-action="clear-all">
@@ -204,12 +213,12 @@
           <div class="fieldgroup">
             <label class="field">
               <span>Startdatum</span>
-              <input id="startDate" type="date" />
+              <input id="startDate" type="date" placeholder="Keine Angabe" />
             </label>
 
             <label class="field">
               <span>Ablaufdatum (optional)</span>
-              <input id="endDate" type="date" />
+              <input id="endDate" type="date" placeholder="Keine Angabe"/>
             </label>
           </div>
 
@@ -342,6 +351,25 @@
           <div class="strong" id="totalBottom">€ 0,00</div>
       </div>
 
+      <!-- Reminder-Übersicht -->
+      <div id="reminderOverview" class="panel panel--reminders">
+        <h2 class="panel__title">Erinnerungen</h2>
+        <p class="panel__subtitle">
+          Nächste anstehende Erinnerungen (max. eine pro Abo gleichzeitig).
+        </p>
+
+        <div id="reminderOverviewList" class="reminderList"></div>
+
+        <div class="actions actions--right">
+          <button
+            type="button"
+            id="reminderOverviewClose"
+            class="btn"
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
 
       <button class="fab" id="fab" aria-label="Abo hinzufügen">+</button>
       <p class="note">Daten bleiben lokal auf deinem Gerät wenn du das willst. Kein Konto, keine Cloud, kein Bullshit.</p>
