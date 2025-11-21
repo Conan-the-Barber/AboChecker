@@ -732,6 +732,70 @@ input, select, textarea {
   justify-content: flex-end;
 }
 
+/* Aktive Zeile in der Reminder-Übersicht hervorheben */
+.reminderRow--active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+/* Snooze-Panel unten im Reminder-Panel */
+.snoozePanel {
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+  padding-top: 8px;
+  padding-bottom: 4px;
+  display: none; /* Standard: versteckt */
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.snoozePanel--open {
+  display: flex;
+}
+
+.snoozePanel__header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.snoozePanel__title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.snoozePanel__subtitle {
+  opacity: 0.8;
+}
+
+.snoozePanel__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.snoozePanel__quick,
+.snoozePanel__date,
+.snoozePanel__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.snoozePanel__hint {
+  opacity: 0.75;
+}
+
+.snoozePanel__date input[type=date],
+.snoozePanel__date input[type=time] {
+  max-width: 150px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
 .stickybar {
   position: fixed;
   left: 0;

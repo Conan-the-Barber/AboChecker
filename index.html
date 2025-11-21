@@ -212,7 +212,7 @@
 
           <div class="fieldgroup">
             <label class="field">
-              <span>Startdatum</span>
+              <span>Startdatum </span>
               <input id="startDate" type="date" placeholder="Keine Angabe" />
             </label>
 
@@ -368,6 +368,64 @@
           >
             Schließen
           </button>
+        </div>
+
+        <!-- Snooze-Leiste für eine ausgewählte Erinnerung -->
+        <div id="reminderSnoozePanel" class="snoozePanel">
+          <div class="snoozePanel__header">
+            <div class="snoozePanel__title">Erinnerung snoozen</div>
+            <div id="snoozeLabel" class="snoozePanel__subtitle"></div>
+          </div>
+
+          <div class="snoozePanel__controls">
+            <div class="snoozePanel__quick">
+              <span class="snoozePanel__hint">Schnellauswahl:</span>
+              <button
+                type="button"
+                class="btn btn--small"
+                data-snooze-offset="1"
+              >
+                Morgen
+              </button>
+              <button
+                type="button"
+                class="btn btn--small"
+                data-snooze-offset="7"
+              >
+                In 1 Woche
+              </button>
+              <button
+                type="button"
+                class="btn btn--small"
+                data-snooze-offset="30"
+              >
+                In 1 Monat
+              </button>
+            </div>
+
+            <div class="snoozePanel__date">
+              <span class="snoozePanel__hint">oder Datum & Uhrzeit wählen:</span>
+              <input id="snoozeDateInput" type="date" />
+              <input id="snoozeTimeInput" type="time" />
+            </div>
+
+            <div class="snoozePanel__actions">
+              <button
+                type="button"
+                id="snoozeApplyBtn"
+                class="btn btn--small btn--primary"
+              >
+                Übernehmen
+              </button>
+              <button
+                type="button"
+                id="snoozeCancelBtn"
+                class="btn btn--small"
+              >
+                Abbrechen
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

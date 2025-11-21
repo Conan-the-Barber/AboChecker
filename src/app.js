@@ -24,29 +24,31 @@ const displayModes = ["monthly", "yearly", "weekly", "quarterly", "daily"];
  *   Diese Funktion kann dauerhaft im Code bleiben.
  */
 function normalizeSub(rawSub) {
-    // defensiv kopieren, damit wir das Original nicht mutieren
+    // defensiv kopieren, umOriginal nicht zu mutieren
     const sub = { ...rawSub };
 
     // --- reminderConfig ------------------------------------------------------
-    if (!sub.reminderConfig || typeof sub.reminderConfig !== "object") {
-        sub.reminderConfig = {
-            mode: "default",          // "default" | "custom" | "off"
-            billingLeadDays: null,    // null = globaler Standard
-            renewalLeadDays: null
+    if (!sub.reminderState || typeof sub.reminderState !== "object") {
+        sub.reminderState = {
+            snoozedUntil: null,
+            snoozedTimeOfDay: null,
+            lastNotifiedAt: null,
+            lastNotificationType: null
         };
     } else {
-        if (sub.reminderConfig.mode !== "default" &&
-            sub.reminderConfig.mode !== "custom" &&
-            sub.reminderConfig.mode !== "off") {
-            sub.reminderConfig.mode = "default";
+        if (typeof sub.reminderState.snoozedUntil !== "string") {
+            sub.reminderState.snoozedUntil = null;
         }
-
-        if (typeof sub.reminderConfig.billingLeadDays !== "number") {
-            sub.reminderConfig.billingLeadDays = null;
+        if (typeof sub.reminderState.snoozedTimeOfDay !== "string" ||
+            !sub.reminderState.snoozedTimeOfDay.includes(":")) {
+            sub.reminderState.snoozedTimeOfDay = null;
         }
-
-        if (typeof sub.reminderConfig.renewalLeadDays !== "number") {
-            sub.reminderConfig.renewalLeadDays = null;
+        if (typeof sub.reminderState.lastNotifiedAt !== "string") {
+            sub.reminderState.lastNotifiedAt = null;
+        }
+        if (sub.reminderState.lastNotificationType !== "billing" &&
+            sub.reminderState.lastNotificationType !== "renewal") {
+            sub.reminderState.lastNotificationType = null;
         }
     }
 
@@ -816,6 +818,11 @@ function getNextReminderForSub(sub, today = new Date()) {
 
     const state = sub.reminderState || {};
     const snoozedUntil = parseISODate(state.snoozedUntil);
+    const snoozeTimeOfDay =
+        typeof state.snoozedTimeOfDay === "string" &&
+        state.snoozedTimeOfDay.includes(":")
+            ? state.snoozedTimeOfDay
+            : null;
 
     const candidates = [];
 
@@ -885,7 +892,9 @@ function getNextReminderForSub(sub, today = new Date()) {
 
     const triggerAt = applyTimeOfDay(
         chosen.reminderDate,
-        (reminderSettings && reminderSettings.timeOfDay) || defaultReminderSettings.timeOfDay
+        snoozeTimeOfDay ||
+            (reminderSettings && reminderSettings.timeOfDay) ||
+            defaultReminderSettings.timeOfDay
     );
 
     const notificationId = buildNotificationId(sub.id, chosen.type);
@@ -938,6 +947,8 @@ function openReminderOverview(open) {
 
     if (isOpen) {
         renderReminderOverview();
+    } else {
+        openSnoozePanel(false); // Snooze-Leiste mit schließen
     }
 }
 
@@ -1135,6 +1146,9 @@ let sortBy = "name";            // "name" | "price" | später: "nextDue"
 let sortDir = "asc";            // "asc" | "desc"
 // globale Reminder-Einstellungen im Speicher
 let reminderSettings = { ...defaultReminderSettings };
+//snooze variablen
+let currentSnoozeSubId = null;
+let currentSnoozeType  = null; // "billing" | "renewal"
 
 // --- DOM Refs ----------------------------------------------------------------
 const panel           = document.getElementById("panel");
@@ -1199,6 +1213,13 @@ const reminderRenewalCustomInput  = document.getElementById("reminderRenewalCust
 const reminderOverview       = document.getElementById("reminderOverview");
 const reminderOverviewList   = document.getElementById("reminderOverviewList");
 const reminderOverviewClose  = document.getElementById("reminderOverviewClose");
+
+const reminderSnoozePanel  = document.getElementById("reminderSnoozePanel");
+const snoozeLabelEl        = document.getElementById("snoozeLabel");
+const snoozeDateInput      = document.getElementById("snoozeDateInput");
+const snoozeApplyBtn       = document.getElementById("snoozeApplyBtn");
+const snoozeCancelBtn      = document.getElementById("snoozeCancelBtn");
+const snoozeTimeInput      = document.getElementById("snoozeTimeInput");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -1290,6 +1311,38 @@ function init() {
         });
     }
 
+    //snooze listener
+        // Snooze-Panel: Quick-Buttons + Übernehmen / Abbrechen
+    if (reminderSnoozePanel) {
+        const quickButtons = reminderSnoozePanel.querySelectorAll("[data-snooze-offset]");
+        quickButtons.forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const offset = Number(btn.dataset.snoozeOffset);
+                if (!Number.isFinite(offset)) return;
+                const base = new Date();
+                const target = addDays(base, offset) || base;
+                if (snoozeDateInput) {
+                    snoozeDateInput.value = formatISODate(target);
+                }
+            });
+        });
+    }
+
+    if (snoozeApplyBtn) {
+        snoozeApplyBtn.addEventListener("click", () => {
+            if (!snoozeDateInput || !snoozeDateInput.value) {
+                window.alert("Bitte ein Datum wählen.");
+                return;
+            }
+            applySnoozeFromDateStr(snoozeDateInput.value);
+        });
+    }
+
+    if (snoozeCancelBtn) {
+        snoozeCancelBtn.addEventListener("click", () => {
+            openSnoozePanel(false);
+        });
+    }
 
     // events
     fab.addEventListener("click", () => {
@@ -1513,41 +1566,62 @@ function initReminderSettingsUI() {
     }
 }
 
+// Sooze UI
 function handleReminderSnooze(subId, type) {
     const sub = subs.find((s) => s.id === subId);
     if (!sub) return;
 
+    currentSnoozeSubId = subId;
+    currentSnoozeType  = type || "billing";
+
+    // aktive Reminder-Zeile hervorheben
+    if (reminderOverview) {
+        reminderOverview
+            .querySelectorAll(".reminderRow--active")
+            .forEach((row) => row.classList.remove("reminderRow--active"));
+
+        const rows = reminderOverview.querySelectorAll(".reminderRow");
+        rows.forEach((row) => {
+            if (
+                row.dataset.subId === subId &&
+                (!type || row.dataset.reminderType === type)
+            ) {
+                row.classList.add("reminderRow--active");
+            }
+        });
+    }
+
     const today = new Date();
     const defaultDate = formatISODate(addDays(today, 3) || today);
-
-    const input = window.prompt(
-        "Bis wann soll diese Erinnerung snoozen?\nFormat: YYYY-MM-DD",
-        defaultDate
-    );
-    if (!input) {
-        return;
+    if (snoozeDateInput) {
+        snoozeDateInput.value = defaultDate;
     }
 
-    const snoozeDate = parseISODate(input.trim());
-    if (!snoozeDate) {
-        window.alert("Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben.");
-        return;
+    // Zeit-Default: entweder letzte Snooze-Zeit oder globale Reminder-Uhrzeit
+    const state = sub.reminderState || {};
+    const fallbackTime =
+        (reminderSettings && reminderSettings.timeOfDay) ||
+        defaultReminderSettings.timeOfDay;
+
+    const lastSnoozeTime =
+        typeof state.snoozedTimeOfDay === "string" &&
+        state.snoozedTimeOfDay.includes(":")
+            ? state.snoozedTimeOfDay
+            : fallbackTime;
+
+    if (snoozeTimeInput) {
+        snoozeTimeInput.value = lastSnoozeTime;
     }
 
-    // Reminder-State sicherstellen
-    if (!sub.reminderState || typeof sub.reminderState !== "object") {
-        sub.reminderState = {
-            snoozedUntil: null,
-            lastNotifiedAt: null,
-            lastNotificationType: null
-        };
+    // Beschriftung (z.B. "Netflix · Zahlung")
+    const name = sub.name || "Abo";
+    const typeLabel = type === "renewal" ? "Verlängerung" : "Zahlung";
+
+    if (snoozeLabelEl) {
+        snoozeLabelEl.textContent = `${name} · ${typeLabel}`;
     }
 
-    sub.reminderState.snoozedUntil = formatISODate(snoozeDate);
-
-    saveSubscriptions(subs);
-    render();
-    renderReminderOverview();
+    openSnoozePanel(true);
 }
 
 function handleMenuAction(action) {
@@ -1840,6 +1914,7 @@ function onSubmit(e) {
                 // Reminder-Status (wird von der App / Capacitor gepflegt)
                 reminderState: {
                     snoozedUntil: null,
+                    snoozedTimeOfDay: null,
                     lastNotifiedAt: null,
                     lastNotificationType: null
                 }
@@ -2114,6 +2189,67 @@ function updateReminderModeUI() {
 
     reminderCustomWrapper.style.display = showCustom ? "block" : "none";
 }
+
+function openSnoozePanel(open) {
+    if (!reminderSnoozePanel) return;
+    const isOpen = !!open;
+    reminderSnoozePanel.classList.toggle("snoozePanel--open", isOpen);
+
+    if (!isOpen) {
+        currentSnoozeSubId = null;
+        currentSnoozeType = null;
+        if (snoozeDateInput) snoozeDateInput.value = "";
+        if (snoozeTimeInput) snoozeTimeInput.value = "";
+        if (reminderOverview) {
+            reminderOverview
+                .querySelectorAll(".reminderRow--active")
+                .forEach((row) => row.classList.remove("reminderRow--active"));
+        }
+    }
+}
+
+function applySnoozeFromDateStr(dateStr) {
+    if (!currentSnoozeSubId || !dateStr) {
+        return;
+    }
+
+    const snoozeDate = parseISODate(dateStr);
+    if (!snoozeDate) {
+        window.alert("Ungültiges Datum. Bitte ein gültiges Datum wählen.");
+        return;
+    }
+
+    const sub = subs.find((s) => s.id === currentSnoozeSubId);
+    if (!sub) return;
+
+    if (!sub.reminderState || typeof sub.reminderState !== "object") {
+        sub.reminderState = {
+            snoozedUntil: null,
+            snoozedTimeOfDay: null,
+            lastNotifiedAt: null,
+            lastNotificationType: null
+        };
+    }
+
+    // Zeit aus dem Input oder auf globale Reminder-Uhrzeit zurückfallen
+    let timeOfDay = null;
+    if (snoozeTimeInput && typeof snoozeTimeInput.value === "string" && snoozeTimeInput.value.includes(":")) {
+        timeOfDay = snoozeTimeInput.value;
+    } else {
+        timeOfDay =
+            (reminderSettings && reminderSettings.timeOfDay) ||
+            defaultReminderSettings.timeOfDay;
+    }
+
+    sub.reminderState.snoozedUntil = formatISODate(snoozeDate);
+    sub.reminderState.snoozedTimeOfDay = timeOfDay;
+
+    saveSubscriptions(subs);
+    render();
+    renderReminderOverview();
+    openSnoozePanel(false);
+}
+
 
 function escapeHTML(str) {
 return String(str)
