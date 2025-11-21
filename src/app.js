@@ -24,10 +24,9 @@ const displayModes = ["monthly", "yearly", "weekly", "quarterly", "daily"];
  *   Diese Funktion kann dauerhaft im Code bleiben.
  */
 function normalizeSub(rawSub) {
-    // defensiv kopieren, umOriginal nicht zu mutieren
     const sub = { ...rawSub };
 
-    // --- reminderConfig ------------------------------------------------------
+    // reminderState normalisieren (nur EIN Block!)
     if (!sub.reminderState || typeof sub.reminderState !== "object") {
         sub.reminderState = {
             snoozedUntil: null,
@@ -39,29 +38,11 @@ function normalizeSub(rawSub) {
         if (typeof sub.reminderState.snoozedUntil !== "string") {
             sub.reminderState.snoozedUntil = null;
         }
-        if (typeof sub.reminderState.snoozedTimeOfDay !== "string" ||
-            !sub.reminderState.snoozedTimeOfDay.includes(":")) {
+        if (
+            typeof sub.reminderState.snoozedTimeOfDay !== "string" ||
+            !sub.reminderState.snoozedTimeOfDay.includes(":")
+        ) {
             sub.reminderState.snoozedTimeOfDay = null;
-        }
-        if (typeof sub.reminderState.lastNotifiedAt !== "string") {
-            sub.reminderState.lastNotifiedAt = null;
-        }
-        if (sub.reminderState.lastNotificationType !== "billing" &&
-            sub.reminderState.lastNotificationType !== "renewal") {
-            sub.reminderState.lastNotificationType = null;
-        }
-    }
-
-    // --- reminderState -------------------------------------------------------
-    if (!sub.reminderState || typeof sub.reminderState !== "object") {
-        sub.reminderState = {
-            snoozedUntil: null,
-            lastNotifiedAt: null,
-            lastNotificationType: null
-        };
-    } else {
-        if (typeof sub.reminderState.snoozedUntil !== "string") {
-            sub.reminderState.snoozedUntil = null;
         }
         if (typeof sub.reminderState.lastNotifiedAt !== "string") {
             sub.reminderState.lastNotifiedAt = null;
@@ -74,6 +55,7 @@ function normalizeSub(rawSub) {
 
     return sub;
 }
+
 
 function loadSubscriptions() {
     try {
