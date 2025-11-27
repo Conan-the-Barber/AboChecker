@@ -1,439 +1,641 @@
-<!-- /home/abrink/Schreibtisch/Projekte/AboChecker/abo-checker/index.html -->
-
 <!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Abo Checker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="src/styles.css" />
+    <script defer src="src/app.js"></script>
   </head>
-
-  <div id="menuOverlay" class="menu-overlay"></div>
-
-  <nav id="menu" class="menu">
-      <ul class="menu__list">
-          <li class="menu__group">
-            <button
-                type="button"
-                id="reminderSettingsToggle"
-                class="menu__item menu__item--subtoggle"
-            >
-                Erinnerungen ▾
-            </button>
-
-            <div id="reminderSettingsPanel" class="menu__subpanel">
-                <label class="menu__field">
-                    <span>Zahlung: Vorlauf (Tage)</span>
-                    <input
-                        id="reminderBillingInput"
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputmode="numeric"
-                    />
-                </label>
-
-                <label class="menu__field">
-                    <span>Verlängerung: Vorlauf (Tage)</span>
-                    <input
-                        id="reminderRenewalInput"
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputmode="numeric"
-                    />
-                </label>
-
-                <label class="menu__field">
-                    <span>Uhrzeit</span>
-                    <input
-                        id="reminderTimeInput"
-                        type="time"
-                    />
-                </label>
-            </div>
-          </li>
-          <li>
-            <button
-                class="menu__item"
-                data-menu-action="reminder-overview"
-                type="button"
-            >
-                Erinnerungsübersicht
-            </button>
-          </li>
-
-          <li>
-              <button class="menu__item" data-menu-action="clear-all">
-                  Alle Abos entfernen
-              </button>
-          </li>
-          <li>
-              <button class="menu__item" data-menu-action="toggle-dark" id="menuItemTheme">
-                  Darkmode umschalten
-              </button>
-          </li>
-          <li class="menu__group">
-              <div class="menu__label">Gesamt anzeigen als</div>
-              <select id="displaySelect" class="menu__select">
-                  <option value="monthly">pro Monat</option>
-                  <option value="yearly">pro Jahr</option>
-                  <option value="weekly">pro Woche</option>
-                  <option value="quarterly">pro Quartal</option>
-                  <option value="daily">pro Tag</option>
-              </select>
-          </li>
-      </ul>
-  </nav>
-
   <body>
-    <div class="app" id="app">
-      <header class="app__header">
-        <h1>Abo Checker</h1>
-        <div class="app__total">
-          <span id="totalLabel">Monatskosten aktiv:</span>
-          <b id="totalTop">€ 0,00</b>
-        </div>
-        <button id="menuBtn" class="menu-btn" aria-label="Menü öffnen">
-        ☰
-        </button>
-      </header>
+    <div id="root">
+      <div class="app">
 
-      <!-- Formular-Panel -->
-      <div class="panel" id="panel">
-        <form class="form" id="form">
-          <input type="hidden" id="formId" />
+        <!-- Kopf: Titel + Menübutton -->
+        <header class="app-header">
+          <div>
+            <h1 class="app-title">Abo Checker</h1>
+            <div class="app__total">
+              <span id="totalLabel">Kosten aktiv (pro Monat):</span>
+              <strong id="totalTop">0,00&nbsp;€</strong>
+            </div>
+          </div>
+          <button id="menuBtn" class="menu-btn" aria-label="Menü öffnen">
+            ☰
+          </button>
+        </header>
 
-          <label class="field">
-            <span>Name</span>
-            <input id="name" placeholder="Netflix, Handyvertrag…" />
-          </label>
+        <!-- Suchleiste / Filter / Sort -->
+        <div class="card">
+          <div class="listToolbar">
+            <input
+              id="searchInput"
+              class="listToolbar__search"
+              type="search"
+              placeholder="Abos durchsuchen…"
+            />
 
-      <div class="fieldgroup">
-          <label class="field">
-              <span>Anbieter</span>
-              <input id="provider" placeholder="Telekom, Spotify…" />
-          </label>
+            <button
+              id="filterToggleBtn"
+              class="listToolbar__filterBtn"
+              aria-expanded="false"
+              aria-controls="filterPanel"
+            >
+              🔍
+            </button>
 
-          <label class="field">
-              <span>Kategorie</span>
-              <div class="category-control">
-                  <select id="categorySelect">
-                      <option value="">Keine Kategorie</option>
-                      <!-- Optionen kommen dynamisch aus JS -->
-                  </select>
-                  <button
-                      type="button"
-                      id="categoryAddBtn"
-                      class="category-control__add"
-                      aria-label="Kategorie hinzufügen"
-                      title="Kategorie hinzufügen"
-                  >
-                      +
-                  </button>
-                  <button
-                      type="button"
-                      id="categoryDeleteBtn"
-                      class="category-control__delete"
-                      aria-label="Kategorie löschen"
-                      title="Kategorie löschen"
-                  >
-                      🗑
-                  </button>
+            <select id="sortSelect" class="listToolbar__sort">
+              <option value="name">Name</option>
+              <option value="price">Preis</option>
+              <option value="nextDue">Fälligkeit</option>
+            </select>
+
+            <button id="sortDirBtn" class="listToolbar__sortDir" type="button">
+              ↑
+            </button>
+          </div>
+
+          <!-- Filterpanel -->
+          <div id="filterPanel" class="filterPanel">
+            <div class="filterPanel__row">
+              <div class="filterPanel__field">
+                <span>Status</span>
+                <select id="statusFilter">
+                  <option value="all">Alle</option>
+                  <option value="active">Aktiv</option>
+                  <option value="inactive">Inaktiv / geplant / beendet</option>
+                </select>
               </div>
-          </label>
-      </div>
 
-          <label class="field">
+              <div class="filterPanel__field">
+                <span>Zyklus</span>
+                <select id="cycleFilter">
+                  <option value="all">Alle</option>
+                  <option value="monthly">monatlich</option>
+                  <option value="yearly">jährlich</option>
+                  <option value="quarterly">quartalsweise</option>
+                  <option value="weekly">wöchentlich</option>
+                  <option value="daily">täglich</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="filterPanel__row">
+              <div class="filterPanel__field filterPanel__field--full">
+                <span>Kategorie</span>
+                <select id="categoryFilter">
+                  <option value="all">Alle Kategorien</option>
+                  <option value="none">Ohne Kategorie</option>
+                </select>
+              </div>
+
+              <button
+                id="filterResetBtn"
+                type="button"
+                class="filterPanel__reset"
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabellenkopf -->
+          <div class="list__head">
+            <div>Name &amp; Details</div>
+            <div class="hide-sm">Abbuchung</div>
+            <div class="hide-sm">Zyklus</div>
+            <div class="hide-sm" id="amountHeader">€ /Monat</div>
+            <div class="hide-sm">Aktiv</div>
+            <div></div>
+          </div>
+
+          <!-- Liste + Empty-State -->
+          <ul id="list" class="list"></ul>
+          <div id="empty" class="empty">Noch keine Abos hinzugefügt.</div>
+        </div>
+
+        <p class="note">
+          Tipp: Pro-Modus aktivieren, um Erinnerungen, Snooze und mehr zu testen.
+        </p>
+
+        <!-- FAB zum neuen Abo -->
+        <button id="fab" class="fab" type="button">+</button>
+
+        <!-- Stickybar unten -->
+        <div class="stickybar">
+          <div>
+            <div id="stickyLabel">Gesamt (aktiv, pro Monat)</div>
+            <strong id="totalBottom">0,00&nbsp;€</strong>
+          </div>
+          <div>
+            <select id="displaySelect" class="menu__select">
+              <option value="monthly">pro Monat</option>
+              <option value="yearly">pro Jahr</option>
+              <option value="quarterly">pro Quartal</option>
+              <option value="weekly">pro Woche</option>
+              <option value="daily">pro Tag</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overlay für das Seitenmenü -->
+    <div id="menuOverlay" class="menu-overlay"></div>
+
+    <!-- Seitenmenü -->
+    <nav id="menu" class="menu" aria-label="Hauptmenü">
+      <ul class="menu__list">
+        <li>
+          <button
+            class="menu__item"
+            data-menu-action="clear-all"
+          >
+            Alle Abos entfernen
+          </button>
+        </li>
+
+        <li>
+          <button
+            class="menu__item"
+            id="menuItemTheme"
+            data-menu-action="toggle-dark"
+          >
+            Darkmode umschalten
+          </button>
+        </li>
+
+        <li>
+          <div class="menu__group" data-pro-only="1">
+            <span class="menu__label">Erinnerungen</span>
+
+            <button
+              class="menu__item"
+              data-menu-action="reminder-overview"
+              data-pro-only="1"
+            >
+              Nächste Erinnerungen anzeigen
+            </button>
+
+            <!-- Toggle öffnet/ schließt globale Reminder-Settings im Menü -->
+            <button
+              id="reminderSettingsToggle"
+              type="button"
+              class="menu__item menu__item--subtoggle"
+              data-pro-only="1"
+            >
+              Erinnerungen ▾
+            </button>
+
+            <div
+              id="reminderSettingsPanel"
+              class="menu__subpanel"
+              data-pro-only="1"
+            >
+              <div class="menu__field">
+                <span>Tage vor Abbuchung</span>
+                <input
+                  id="reminderBillingInput"
+                  type="number"
+                  min="0"
+                  step="1"
+                />
+              </div>
+
+              <div class="menu__field">
+                <span>Tage vor Vertragsende</span>
+                <input
+                  id="reminderRenewalInput"
+                  type="number"
+                  min="0"
+                  step="1"
+                />
+              </div>
+
+              <div class="menu__field">
+                <span>Uhrzeit</span>
+                <input id="reminderTimeInput" type="time" />
+              </div>
+
+              <div class="menu__field">
+                <span>Stil</span>
+                <select id="reminderStyleSelect">
+                  <option value="normal">Normal</option>
+                  <option value="silent">Stiller Hinweis</option>
+                  <option value="alarm">Wichtiger Alarm</option>
+                </select>
+              </div>
+
+              <div class="menu__field">
+                <span>Standard-Klingelton</span>
+                <select id="reminderSoundSelect" class="menu__select">
+                  <option value="system">System-Standard</option>
+                  <option value="soft">Sanfter Ton</option>
+                  <option value="alarm">Laute Alarmglocke</option>
+                  <option value="silent">Kein Ton</option>
+                </select>
+              </div>
+
+              <div class="menu__field">
+                <span>Vibration</span>
+                <label class="switch">
+                  <input type="checkbox" id="reminderVibrateChk" />
+                  <span>Vibrieren bei Erinnerungen</span>
+                </label>
+              </div>
+
+              <!-- DEBUGGING!!!!!! Test-Button -->
+              <button
+                type="button"
+                class="btn btn--small"
+                id="reminderSoundPreview"
+              >
+                Testton abspielen
+              </button>
+
+              <div class="menu__field">
+                <span>Snooze-Tage (Standard)</span>
+                <input
+                  id="reminderSnoozeDaysInput"
+                  type="number"
+                  min="1"
+                  step="1"
+                />
+              </div>
+            </div>
+
+            <button
+              class="menu__item"
+              data-menu-action="reminder-settings"
+              data-pro-only="1"
+            >
+              Abo-spezifische Einstellungen…
+            </button>
+          </div>
+        </li>
+
+        <li>
+          <button
+            class="menu__item"
+            data-menu-action="pro-settings"
+          >
+            Pro-Modus &amp; Debug…
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Hauptformular-Panel -->
+    <section id="panel" class="panel">
+      <form id="form" class="form">
+        <h2 class="form__title">Abo</h2>
+
+        <input type="hidden" id="formId" />
+
+        <!-- Allgemeine Daten -->
+        <section class="form__section form__section--grid">
+          <h3 class="form__sectionTitle">Allgemein</h3>
+
+          <div class="field">
+            <span>Name</span>
+            <input id="name" type="text" required />
+          </div>
+
+          <div class="field">
+            <span>Anbieter</span>
+            <input id="provider" type="text" />
+          </div>
+
+          <div class="field">
+            <span>Kategorie</span>
+            <div class="field__row category-control">
+              <select id="categorySelect"></select>
+              <button
+                type="button"
+                id="categoryAddBtn"
+                class="category-control__add"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                id="categoryDeleteBtn"
+                class="category-control__delete"
+              >
+                −
+              </button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span>Notiz</span>
+            <textarea id="note"></textarea>
+          </div>
+        </section>
+
+        <!-- Kosten & Zyklus -->
+        <section class="form__section form__section--grid">
+          <h3 class="form__sectionTitle">Kosten &amp; Zyklus</h3>
+
+          <div class="field">
+            <span>Betrag</span>
+            <input
+              id="amount"
+              type="number"
+              step="0.01"
+              min="0"
+              inputmode="decimal"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <span>Zahlungszyklus</span>
+            <select id="cycle"></select>
+          </div>
+
+          <div class="field">
             <span>Abbuchung</span>
             <select id="debit">
               <option value="auto">automatisch</option>
               <option value="manual">manuell</option>
             </select>
-          </label>
-
-          <!-- Erinnerungs-Einstellungen pro Abo -->
-          <div class="fieldgroup">
-              <label class="field">
-                  <span>Erinnerungen</span>
-                  <select id="reminderMode">
-                      <option value="default">Standard-Einstellungen verwenden</option>
-                      <option value="custom">Abo-spezifische Einstellungen</option>
-                      <option value="off">Für dieses Abo aus</option>
-                  </select>
-              </label>
-
-              <div class="field field--reminderDetails" id="reminderCustomFields">
-                  <span>Vorlauf (Tage)</span>
-                  <div class="fieldgroup fieldgroup--inline">
-                      <label class="field">
-                          <span>Zahlung</span>
-                          <input
-                              id="reminderBillingCustom"
-                              type="number"
-                              min="0"
-                              step="1"
-                              inputmode="numeric"
-                          />
-                      </label>
-                      <label class="field">
-                          <span>Verlängerung</span>
-                          <input
-                              id="reminderRenewalCustom"
-                              type="number"
-                              min="0"
-                              step="1"
-                              inputmode="numeric"
-                          />
-                      </label>
-                  </div>
-              </div>
           </div>
 
-          <div class="fieldgroup">
-            <label class="field">
-              <span>Betrag in €</span>
-              <input
-                id="amount"
-                type="number"
-                inputmode="decimal"
-                step="0.01"
-                min="0"
-                placeholder="0,00"
-              />
-            </label>
-
-            <label class="field">
-              <span>Zahlungsweise</span>
-              <select id="cycle"></select>
-            </label>
-          </div>
-
-          <div class="fieldgroup">
-            <label class="field">
-              <span>Startdatum </span>
-              <input id="startDate" type="date" placeholder="Keine Angabe" />
-            </label>
-
-            <label class="field">
-              <span>Ablaufdatum (optional)</span>
-              <input id="endDate" type="date" placeholder="Keine Angabe"/>
-            </label>
-          </div>
-
-          <label class="field">
+          <div class="field">
             <span>Abbuchungstag (optional)</span>
             <input
               id="billingDay"
               type="number"
               min="1"
               max="31"
-              placeholder="Tag im Monat (1–31)"
+              step="1"
             />
-          </label>
+          </div>
+        </section>
 
-          <label class="field">
-            <span>Notiz</span>
-            <textarea id="note" rows="3" placeholder="Infos, Vertragsnummer…"></textarea>
-          </label>
+        <!-- Laufzeit -->
+        <section class="form__section form__section--grid">
+          <h3 class="form__sectionTitle">Laufzeit</h3>
 
-          <label class="switch">
-            <input id="active" type="checkbox" checked />
-            <span>Aktiv</span>
-          </label>
-
-          <div class="actions">
-            <button type="button" id="editBtn" class="btn btn--primary">Bearbeiten</button>
-            <button type="submit" id="submitBtn" class="btn btn--primary">Speichern</button>
-            <button type="button" id="deleteBtn" class="btn btn--danger">Löschen</button>
-            <button type="button" id="cancelBtn" class="btn btn--primary">Schließen</button>
+          <div class="field">
+            <span>Startdatum</span>
+            <input id="startDate" type="date" />
           </div>
 
-        </form>
+          <div class="field">
+            <span>Enddatum</span>
+            <input id="endDate" type="date" />
+          </div>
 
-      </div>
+          <div class="field">
+            <span>Aktiv</span>
+            <label class="switch">
+              <input id="active" type="checkbox" checked />
+              <span>Abo zählt zu den Kosten</span>
+            </label>
+          </div>
+        </section>
 
-      <!-- Liste -->
-      <div class="card">
-        <div class="listToolbar">
-            <input
-                id="searchInput"
-                class="listToolbar__search"
-                type="search"
-                placeholder="Suchen..."
-            />
+        <!-- Abo-spezifische Reminder -->
+        <section class="form__section" data-pro-only="1">
+          <h3 class="form__sectionTitle">Erinnerungen (für dieses Abo)</h3>
 
-            <select id="sortSelect" class="listToolbar__sort">
-                <option value="name">Name</option>
-                <option value="price">Preis</option>
-                <!-- später: <option value="nextDue">Sortierung: nächste Fälligkeit</option> -->
+          <div class="field">
+            <span>Modus</span>
+            <select id="reminderMode">
+              <option value="default">Standard verwenden</option>
+              <option value="custom">Abo-spezifisch</option>
+              <option value="off">Für dieses Abo aus</option>
             </select>
+          </div>
 
+          <div id="reminderCustomFields">
+            <div class="field field--reminderDetails">
+              <span>Vorlauf (Tage)</span>
+              <div class="fieldgroup fieldgroup--inline">
+                <input
+                  id="reminderBillingCustom"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Zahlung"
+                />
+                <input
+                  id="reminderRenewalCustom"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Verlängerung"
+                />
+              </div>
+            </div>
+
+            <div class="field" id="reminderTimeWrapper">
+              <span>Uhrzeit</span>
+              <input id="reminderTimeCustom" type="time" />
+            </div>
+
+            <div class="field" id="reminderStyleWrapper">
+              <span>Stil</span>
+              <input
+                id="reminderStyleCustom"
+                type="text"
+                placeholder="normal | silent | alarm"
+              />
+            </div>
+
+            <div class="field" id="reminderSnoozeWrapper">
+              <span>Snooze-Tage</span>
+              <input
+                id="reminderSnoozeCustom"
+                type="number"
+                min="1"
+                step="1"
+              />
+            </div>
+          </div>
+        </section>
+
+        <!-- Aktionen -->
+        <section class="form__section">
+          <div class="actions actions--right">
             <button
-                id="sortDirBtn"
-                class="listToolbar__sortDir"
-                type="button"
-                aria-label="Sortierreihenfolge umschalten"
+              type="button"
+              id="editBtn"
+              class="btn btn--ghost"
             >
-                ↑
+              Bearbeiten
             </button>
 
             <button
-                id="filterToggleBtn"
-                class="listToolbar__filterBtn"
-                type="button"
-                aria-expanded="false"
-                aria-controls="filterPanel"
+              type="submit"
+              id="submitBtn"
+              class="btn btn--primary"
             >
-                <img src="src/img/icon/filter-icon-svg-7.png" alt="Filter">
+              Speichern
             </button>
+
+            <button
+              type="button"
+              id="deleteBtn"
+              class="btn btn--danger"
+            >
+              Löschen
+            </button>
+
+            <button
+              type="button"
+              id="cancelBtn"
+              class="btn"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </section>
+      </form>
+    </section>
+
+    <!-- Reminder-Übersicht + Snooze -->
+    <section
+      id="reminderOverview"
+      class="panel panel--reminders"
+      aria-hidden="true"
+    >
+      <h2 class="panel__title">Erinnerungsübersicht</h2>
+      <p class="panel__subtitle">
+        Nächste anstehende Erinnerungen (max. eine pro Abo gleichzeitig).
+      </p>
+
+      <div id="reminderOverviewList" class="reminderList"></div>
+
+      <!-- Snooze-Panel (wird per JS ein-/ausgeblendet) -->
+      <div id="reminderSnoozePanel" class="snoozePanel">
+        <div class="snoozePanel__header">
+          <div id="snoozeLabel" class="snoozePanel__title">
+            Abo · Typ
+          </div>
+          <div class="snoozePanel__subtitle">
+            Wähle, bis wann diese Erinnerung pausiert werden soll.
+          </div>
         </div>
 
-        <div id="filterPanel" class="filterPanel">
-            <div class="filterPanel__row">
-                <label class="filterPanel__field">
-                    <span>Status</span>
-                    <select id="statusFilter">
-                        <option value="all">Alle</option>
-                        <option value="active">Nur aktive</option>
-                        <option value="inactive">Nur inaktive</option>
-                    </select>
-                </label>
+        <div class="snoozePanel__controls">
+          <div class="snoozePanel__quick">
+            <span class="snoozePanel__hint">Schnellwahl:</span>
+            <button
+              type="button"
+              class="btn btn--small"
+              data-snooze-offset="1"
+            >
+              +1&nbsp;Tag
+            </button>
+            <button
+              type="button"
+              class="btn btn--small"
+              data-snooze-offset="3"
+            >
+              +3&nbsp;Tage
+            </button>
+            <button
+              type="button"
+              class="btn btn--small"
+              data-snooze-offset="7"
+            >
+              +7&nbsp;Tage
+            </button>
+          </div>
 
-                <label class="filterPanel__field">
-                    <span>Zyklus</span>
-                    <select id="cycleFilter">
-                        <option value="all">Alle</option>
-                        <option value="daily">täglich</option>
-                        <option value="weekly">wöchentlich</option>
-                        <option value="monthly">monatlich</option>
-                        <option value="quarterly">vierteljährlich</option>
-                        <option value="yearly">jährlich</option>
-                    </select>
-                </label>
-            </div>
+          <div class="snoozePanel__date">
+            <span>Bis:</span>
+            <input id="snoozeDateInput" type="date" />
+            <input id="snoozeTimeInput" type="time" />
+          </div>
 
-            <div class="filterPanel__row">
-                <label class="filterPanel__field filterPanel__field--full">
-                    <span>Kategorie</span>
-                    <select id="categoryFilter">
-                        <option value="all">Alle Kategorien</option>
-                        <option value="none">Ohne Kategorie</option>
-                        <!-- Kategorien kommen aus JS -->
-                    </select>
-                </label>
-
-                <button
-                    type="button"
-                    id="filterResetBtn"
-                    class="filterPanel__reset"
-                >
-                    Filter zurücksetzen
-                </button>
-            </div>
+          <div class="snoozePanel__actions">
+            <button
+              type="button"
+              id="snoozeApplyBtn"
+              class="btn btn--small btn--primary"
+            >
+              Übernehmen
+            </button>
+            <button
+              type="button"
+              id="snoozeCancelBtn"
+              class="btn btn--small"
+            >
+              Abbrechen
+            </button>
+          </div>
         </div>
-
-        <div class="list__head">
-            <div>Abo</div>
-            <div>Abbuchung</div>
-            <div>Zahlungsweise</div>
-            <div class="right" id="amountHeader">€/Monat</div>
-            <div class="center">Aktiv</div>
-        </div>
-
-        <div id="empty" class="empty">Noch keine Abos hinzugefügt.</div>
-        <ul class="list" id="list"></ul>
       </div>
 
-      <!-- Sticky-Bottom -->
-      <div class="stickybar">
-          <div id="stickyLabel">Gesamt (aktiv, pro Monat)</div>
-          <div class="strong" id="totalBottom">€ 0,00</div>
+      <div class="actions actions--right" style="margin-top: 0.75rem;">
+        <button
+          type="button"
+          id="reminderOverviewClose"
+          class="btn"
+        >
+          Schließen
+        </button>
       </div>
+    </section>
 
-      <!-- Reminder-Übersicht -->
-      <div id="reminderOverview" class="panel panel--reminders">
-        <h2 class="panel__title">Erinnerungen</h2>
+    <!-- Reminder-Settings-Seite (Liste aller Abos mit ihren Reminder-Konfigurationen) -->
+    <section id="reminderSettingsPage" class="panel">
+      <div class="form">
+        <h2 class="form__title">Erinnerungen pro Abo</h2>
         <p class="panel__subtitle">
-          Nächste anstehende Erinnerungen (max. eine pro Abo gleichzeitig).
+          Hier kannst du Abo-spezifische Einstellungen bearbeiten.
         </p>
 
-        <div id="reminderOverviewList" class="reminderList"></div>
+        <div id="reminderSettingsSubList"></div>
 
         <div class="actions actions--right">
           <button
             type="button"
-            id="reminderOverviewClose"
+            id="reminderSettingsClose"
             class="btn"
           >
             Schließen
           </button>
         </div>
+      </div>
+    </section>
 
-        <!-- Snooze-Leiste für eine ausgewählte Erinnerung -->
-        <div id="reminderSnoozePanel" class="snoozePanel">
-          <div class="snoozePanel__header">
-            <div class="snoozePanel__title">Erinnerung snoozen</div>
-            <div id="snoozeLabel" class="snoozePanel__subtitle"></div>
+    <!-- Pro-Settings-Panel -->
+    <section id="proSettings" class="panel">
+      <div class="form">
+        <h2 class="form__title">Pro-Modus &amp; Debug</h2>
+
+        <section class="form__section">
+          <div class="field">
+            <span>Pro-Modus</span>
+            <label class="switch">
+              <input id="proEnabled" type="checkbox" />
+              <span>Pro-Funktionen (Erinnerungen etc.) aktivieren</span>
+            </label>
           </div>
+        </section>
 
-          <div class="snoozePanel__controls">
-            <div class="snoozePanel__quick">
-              <span class="snoozePanel__hint">Schnellauswahl:</span>
-              <button
-                type="button"
-                class="btn btn--small"
-                data-snooze-offset="1"
-              >
-                Morgen
-              </button>
-              <button
-                type="button"
-                class="btn btn--small"
-                data-snooze-offset="7"
-              >
-                In 1 Woche
-              </button>
-              <button
-                type="button"
-                class="btn btn--small"
-                data-snooze-offset="30"
-              >
-                In 1 Monat
-              </button>
-            </div>
+        <section class="form__section">
+          <p class="note">
+            Im Pro-Modus werden Reminder berechnet und in der Übersicht angezeigt.
+            Diese Ansicht ist nur für dich im DEV-Test gedacht.
+          </p>
+        </section>
 
-            <div class="snoozePanel__date">
-              <span class="snoozePanel__hint">oder Datum & Uhrzeit wählen:</span>
-              <input id="snoozeDateInput" type="date" />
-              <input id="snoozeTimeInput" type="time" />
-            </div>
-
-            <div class="snoozePanel__actions">
-              <button
-                type="button"
-                id="snoozeApplyBtn"
-                class="btn btn--small btn--primary"
-              >
-                Übernehmen
-              </button>
-              <button
-                type="button"
-                id="snoozeCancelBtn"
-                class="btn btn--small"
-              >
-                Abbrechen
-              </button>
-            </div>
-          </div>
+        <div class="actions actions--right">
+          <button
+            type="button"
+            id="proSettingsClose"
+            class="btn"
+          >
+            Schließen
+          </button>
         </div>
       </div>
-
-      <button class="fab" id="fab" aria-label="Abo hinzufügen">+</button>
-      <p class="note">Daten bleiben lokal auf deinem Gerät wenn du das willst. Kein Konto, keine Cloud, kein Bullshit.</p>
-    </div>
-
-    <script src="src/app.js"></script>
+    </section>
   </body>
 </html>

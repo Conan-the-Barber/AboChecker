@@ -6,13 +6,19 @@
 const STORAGE_KEY   = "abo-checker.subscriptions.v1";
 const THEME_KEY     = "abo-checker.theme";
 const DISPLAY_KEY   = "abo-checker.displayCycle";
+const PRO_KEY = "abo-checker.pro";
 
 const REMINDER_SETTINGS_KEY = "abo-checker.reminders.v1";
+
 // Default-Einstellungen für Erinnerungen
 const defaultReminderSettings = {
-    billingLeadDays: 3,   // Standard: 3 Tage vor Abbuchung erinnern
-    renewalLeadDays:7,  // Standard:7 Tage vor Ablauf / Verlängerung
-    timeOfDay: "09:00"    // Uhrzeit der Benachrichtigung
+    billingLeadDays: 3,
+    renewalLeadDays: 7,
+    timeOfDay: "09:00",
+    style: "normal",       // "normal" | "silent" | "alarm"
+    snoozeDays: 3,
+    sound: "system",       // "system" | "soft" | "alarm" | "silent"
+    vibrate: true          // globale Vibration an/aus
 };
 
 const displayModes = ["monthly", "yearly", "weekly", "quarterly", "daily"];
@@ -126,6 +132,28 @@ function saveReminderSettings(settings) {
         localStorage.setItem(REMINDER_SETTINGS_KEY, serialized);
     } catch (err) {
         console.error("Fehler beim Speichern der Reminder-Settings:", err);
+    }
+}
+
+/* PRO funktionen */
+function loadProFlag() {
+    try {
+        const raw = localStorage.getItem(PRO_KEY);
+        if (raw === "true") return true;
+        if (raw === "false") return false;
+        // Default für DEV: Pro an
+        return true;
+    } catch (err) {
+        console.error("Fehler beim Lesen des Pro-Flags:", err);
+        return true;
+    }
+}
+
+function saveProFlag(value) {
+    try {
+        localStorage.setItem(PRO_KEY, value ? "true" : "false");
+    } catch (err) {
+        console.error("Fehler beim Speichern des Pro-Flags:", err);
     }
 }
 
@@ -244,7 +272,7 @@ function setDisplayCycle(cycle) {
     } catch (err) {
         console.error("Fehler beim Speichern der Anzeige-Einheit:", err);
     }
-    render(); // render kümmert sich auch um Texte
+    render();
 }
 
 // --- Daten + Utils -----------------------------------------------------------
@@ -367,21 +395,41 @@ function getEffectiveReminderConfig(sub) {
     const globalCfg = reminderSettings || defaultReminderSettings;
     const cfg = sub.reminderConfig || {};
 
-    // Wenn der User für dieses Abo Reminder komplett abgeschaltet hat
+    // Reminder für dieses Abo komplett aus
     if (cfg.mode === "off") {
         return {
             mode: "off",
             billingLeadDays: null,
-            renewalLeadDays: null
+            renewalLeadDays: null,
+            timeOfDay: null,
+            style: null,
+            snoozeDays: null
         };
     }
+
+    const resolveStyle = () => {
+        if (typeof cfg.style === "string" && cfg.style) {
+            return cfg.style; // "normal" | "silent" | "alarm"
+        }
+        return globalCfg.style || defaultReminderSettings.style;
+    };
+
+    const resolveSnoozeDays = () => {
+        if (typeof cfg.snoozeDays === "number" && cfg.snoozeDays > 0) {
+            return cfg.snoozeDays;
+        }
+        return globalCfg.snoozeDays || defaultReminderSettings.snoozeDays;
+    };
 
     // "default" und alles Unbekannte → globale Defaults
     if (cfg.mode !== "custom" && cfg.mode !== "off") {
         return {
             mode: "default",
             billingLeadDays: globalCfg.billingLeadDays,
-            renewalLeadDays: globalCfg.renewalLeadDays
+            renewalLeadDays: globalCfg.renewalLeadDays,
+            timeOfDay: globalCfg.timeOfDay,
+            style: resolveStyle(),
+            snoozeDays: resolveSnoozeDays()
         };
     }
 
@@ -396,12 +444,22 @@ function getEffectiveReminderConfig(sub) {
             ? cfg.renewalLeadDays
             : globalCfg.renewalLeadDays;
 
+    const effectiveTimeOfDay =
+        typeof cfg.timeOfDay === "string" && cfg.timeOfDay.includes(":")
+            ? cfg.timeOfDay
+            : globalCfg.timeOfDay;
+
     return {
         mode: "custom",
         billingLeadDays: billingLead,
-        renewalLeadDays: renewalLead
+        renewalLeadDays: renewalLead,
+        timeOfDay: effectiveTimeOfDay,
+        style: resolveStyle(),
+        snoozeDays: resolveSnoozeDays()
     };
 }
+
+
 
 /**
  * Parst ein ISO-Datum im Format "YYYY-MM-DD" in ein Date-Objekt.
@@ -786,7 +844,12 @@ function computeNextRenewalDate(sub, today = new Date()) {
 function getNextReminderForSub(sub, today = new Date()) {
     // Inaktive / geplante / abgelaufene Abos aktuell komplett von Erinnerungen ausschließen.
     const rs = getSubRuntimeState(sub, today);
+
     if (!rs.effectiveActive) {
+        return null;
+    }    
+
+    if (!isPro) {
         return null;
     }
 
@@ -872,11 +935,14 @@ function getNextReminderForSub(sub, today = new Date()) {
         return null;
     }
 
+    const defaultTimeOfDay =
+        (effectiveCfg && effectiveCfg.timeOfDay) ||
+        (reminderSettings && reminderSettings.timeOfDay) ||
+        defaultReminderSettings.timeOfDay;
+
     const triggerAt = applyTimeOfDay(
         chosen.reminderDate,
-        snoozeTimeOfDay ||
-            (reminderSettings && reminderSettings.timeOfDay) ||
-            defaultReminderSettings.timeOfDay
+        snoozeTimeOfDay || defaultTimeOfDay
     );
 
     const notificationId = buildNotificationId(sub.id, chosen.type);
@@ -932,6 +998,82 @@ function openReminderOverview(open) {
     } else {
         openSnoozePanel(false); // Snooze-Leiste mit schließen
     }
+}
+
+function openReminderSettingsPage(open) {
+    if (!reminderSettingsPage) return;
+    const isOpen = !!open;
+    reminderSettingsPage.classList.toggle("panel--open", isOpen);
+
+    if (isOpen) {
+        renderReminderSettingsPage();
+    }
+}
+
+function renderReminderSettingsPage() {
+    // Globale Inputs sind über initReminderSettingsUI() bereits gefüllt
+
+    if (!reminderSettingsSubList) return;
+
+    if (!subs || subs.length === 0) {
+        reminderSettingsSubList.innerHTML =
+            `<div class="empty">Noch keine Abos angelegt.</div>`;
+        return;
+    }
+
+    const rows = subs.map((s) => {
+        const cfg = getEffectiveReminderConfig(s);
+        const mode = (s.reminderConfig && s.reminderConfig.mode) || "default";
+
+        const modeLabel =
+            mode === "off"
+                ? "Aus"
+                : mode === "custom"
+                    ? "Abo-spezifisch"
+                    : "Standard";
+
+        const styleLabel = cfg.style === "silent"
+            ? "Stiller Hinweis"
+            : cfg.style === "alarm"
+                ? "Wichtiger Alarm"
+                : "Normal";
+
+        const leadText = `Zahlung: ${cfg.billingLeadDays} Tage · Verlängerung: ${cfg.renewalLeadDays} Tage`;
+        const timeText = cfg.timeOfDay ? `Uhrzeit: ${cfg.timeOfDay}` : "";
+        const snoozeText = cfg.snoozeDays ? `Snooze: ${cfg.snoozeDays} Tage` : "";
+
+        const meta = [leadText, timeText, snoozeText]
+            .filter(Boolean)
+            .join(" · ");
+
+        return `
+          <div class="reminderSettingsRow">
+            <div class="reminderSettingsRow__main">
+              <div class="reminderSettingsRow__title">
+                ${escapeHTML(s.name || "Abo")}
+              </div>
+              <div class="reminderSettingsRow__meta">
+                ${escapeHTML(modeLabel)} · ${escapeHTML(styleLabel)}
+              </div>
+              <div class="reminderSettingsRow__metaSmall">
+                ${escapeHTML(meta)}
+              </div>
+            </div>
+            <div class="reminderSettingsRow__actions">
+              <button
+                type="button"
+                class="btn btn--small"
+                data-remindersettings-action="open-sub"
+                data-sub-id="${s.id}"
+              >
+                Abo öffnen
+              </button>
+            </div>
+          </div>
+        `;
+    }).join("");
+
+    reminderSettingsSubList.innerHTML = rows;
 }
 
 function renderReminderOverview() {
@@ -996,8 +1138,51 @@ function renderReminderOverview() {
     reminderOverviewList.innerHTML = html;
 }
 
+// ---------------------------------------------------------------------------
+// DEV ONLY – DEBUGGINGFUNKTIONEN!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// ---------------------------------------------------------------------------
+
 /**
- * DEV ONLY --- KANN SPÄTER GELÖSCHT WERDEN --- :
+ * Markiert einen Reminder als "ausgelöst", damit er nicht erneut
+ * für denselben Tag + Typ berechnet wird.
+ *
+ * reminderDateISO = "YYYY-MM-DD" (Reminder-Tag, NICHT unbedingt Fälligkeitstag)
+ */
+function markReminderAsNotified(subId, type, reminderDateISO) {
+    const sub = subs.find((s) => s.id === subId);
+    if (!sub) return;
+
+    if (!sub.reminderState || typeof sub.reminderState !== "object") {
+        sub.reminderState = {
+            snoozedUntil: null,
+            snoozedTimeOfDay: null,
+            lastNotifiedAt: null,
+            lastNotificationType: null
+        };
+    }
+
+    const iso =
+        typeof reminderDateISO === "string" && reminderDateISO.length >= 10
+            ? reminderDateISO.slice(0, 10)
+            : formatISODate(new Date());
+
+    sub.reminderState.lastNotifiedAt = iso;
+    sub.reminderState.lastNotificationType =
+        type === "renewal" ? "renewal" : "billing";
+
+    // Snooze zurücksetzen, weil Reminder behandelt wurde
+    sub.reminderState.snoozedUntil    = null;
+    sub.reminderState.snoozedTimeOfDay = null;
+
+    saveSubscriptions(subs);
+    render();
+    renderReminderOverview();
+}
+
+// Dev- / Native-Hook:
+window.markReminderAsNotified = markReminderAsNotified;
+
+/**
  * Gibt alle aktuell berechneten Reminder-Events in der Konsole aus.
  * Diese Funktion kann im normalen Betrieb entfernt oder deaktiviert werden.
  */
@@ -1026,13 +1211,6 @@ function logUpcomingReminders() {
     );
     console.groupEnd();
 }
-
-
-// ---------------------------------------------------------------------------
-// DEV ONLY – Reminder-Simulation
-// Diese Funktionen werden später für die Capacitor-Version nicht mehr benötigt.
-// Sie dienen nur der Entwicklung / Debug / Validierung der Reminder-Engine.
-// ---------------------------------------------------------------------------
 
 /**
  * Simuliert alle Reminder, die an einem bestimmten Tag fällig wären.
@@ -1107,6 +1285,44 @@ window.testReminders = function(arg) {
 
     console.error("testReminders: Bitte Datum (YYYY-MM-DD) oder Anzahl Tage angeben");
 };
+
+// DEV-Helfer: Übersicht Billing/Renewal & nächste Reminder
+window.testBillingAndRenewal = function(dateStr) {
+    // Referenzdatum wählen: übergebenes Datum oder heute
+    const today = dateStr ? parseISODate(dateStr) || new Date() : new Date();
+
+    if (!(today instanceof Date)) {
+        console.error("testBillingAndRenewal: Ungültiges Datum:", dateStr);
+        return;
+    }
+
+    const rows = subs.map((s) => {
+        const nextBilling  = computeNextBillingDate(s, today);
+        const nextRenewal  = computeNextRenewalDate(s, today);
+        const nextReminder = getNextReminderForSub(s, today);
+
+        return {
+            id: s.id,
+            name: s.name || "",
+            cycle: s.cycle,
+            amount: s.amount,
+            startDate: s.startDate || "",
+            billingDay: s.billingDay ?? "",
+            endDate: s.endDate || "",
+            // berechnete Termine
+            nextBilling: nextBilling ? formatISODate(nextBilling) : null,
+            nextRenewal: nextRenewal ? formatISODate(nextRenewal) : null,
+            // Reminder-Info
+            reminderType: nextReminder ? nextReminder.type : null,
+            reminderTrigger: nextReminder ? nextReminder.triggerAt.toISOString() : null
+        };
+    });
+
+    console.group(`Billing/Renewal-Test für ${formatISODate(today)}`);
+    console.table(rows);
+    console.groupEnd();
+};
+
 // ---------------------------------------------------------------------------
 //Ab hier wieder normale App-Funktionen
 // ---------------------------------------------------------------------------
@@ -1115,8 +1331,9 @@ window.testReminders = function(arg) {
 // {id, name, provider, category, amount, cycle, startDate, billingDay, endDate, note, debit, active}
 let subs = [];
 let formOpen = false;
+let isPro = true;  // TESTVERSION IMMER AUF PRO!!!! DEBUGGING!!!!!!!!!!!
 let formMode = "new"; // "new" | "view" | "edit"
-let displayCycle = "monthly";     // NEU: Anzeige-Einheit für Gesamt/Spalte
+let displayCycle = "monthly";     // Anzeige-Einheit für Gesamt/Spalte
 let searchTerm = "";              // Suchtext für die Liste
 //filter states
 let statusFilter = "all";       // all | active | inactive
@@ -1187,6 +1404,8 @@ const reminderRenewalInput  = document.getElementById("reminderRenewalInput");
 const reminderTimeInput     = document.getElementById("reminderTimeInput");
 const reminderSettingsToggle = document.getElementById("reminderSettingsToggle");
 const reminderSettingsPanel  = document.getElementById("reminderSettingsPanel");
+const reminderStyleSelect      = document.getElementById("reminderStyleSelect");
+const reminderSnoozeDaysInput  = document.getElementById("reminderSnoozeDaysInput");
 
 const reminderModeSelect          = document.getElementById("reminderMode");
 const reminderCustomWrapper       = document.getElementById("reminderCustomFields");
@@ -1195,6 +1414,17 @@ const reminderRenewalCustomInput  = document.getElementById("reminderRenewalCust
 const reminderOverview       = document.getElementById("reminderOverview");
 const reminderOverviewList   = document.getElementById("reminderOverviewList");
 const reminderOverviewClose  = document.getElementById("reminderOverviewClose");
+const reminderTimeCustomInput     = document.getElementById("reminderTimeCustom");
+const reminderTimeWrapper = document.getElementById("reminderTimeWrapper");
+
+const reminderSettingsPage    = document.getElementById("reminderSettingsPage");
+const reminderSettingsClose   = document.getElementById("reminderSettingsClose");
+const reminderSettingsSubList = document.getElementById("reminderSettingsSubList");
+
+const reminderStyleWrapper     = document.getElementById("reminderStyleWrapper");
+const reminderSnoozeWrapper    = document.getElementById("reminderSnoozeWrapper");
+const reminderStyleCustomInput = document.getElementById("reminderStyleCustom");
+const reminderSnoozeCustomInput= document.getElementById("reminderSnoozeCustom");
 
 const reminderSnoozePanel  = document.getElementById("reminderSnoozePanel");
 const snoozeLabelEl        = document.getElementById("snoozeLabel");
@@ -1202,6 +1432,14 @@ const snoozeDateInput      = document.getElementById("snoozeDateInput");
 const snoozeApplyBtn       = document.getElementById("snoozeApplyBtn");
 const snoozeCancelBtn      = document.getElementById("snoozeCancelBtn");
 const snoozeTimeInput      = document.getElementById("snoozeTimeInput");
+
+const reminderSoundSelect   = document.getElementById("reminderSoundSelect");
+const reminderVibrateChk    = document.getElementById("reminderVibrateChk");
+const reminderSoundPreview  = document.getElementById("reminderSoundPreview");
+
+const proSettings      = document.getElementById("proSettings");
+const proEnabledChk    = document.getElementById("proEnabled");
+const proSettingsClose = document.getElementById("proSettingsClose");
 
 // --- Init --------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
@@ -1226,7 +1464,10 @@ function init() {
         displayCycle = storedDisplay;
     }
     updateDisplayTexts();
-    
+
+    // Pro-Flag aus Storage laden
+    isPro = loadProFlag();
+
     //Reminder-Settings aus Storage laden
     reminderSettings = loadReminderSettings();
 
@@ -1250,6 +1491,31 @@ function init() {
     // Reminder-Settings-UI initialisieren
     initReminderSettingsUI();
 
+    // Reminder-Settings-Panel schließen
+    if (reminderSettingsClose && reminderSettingsPage) {
+        reminderSettingsClose.addEventListener("click", () => {
+            openReminderSettingsPage(false);
+        });
+    }
+
+    // Klicks im Reminder-Settings-Panel (Abo öffnen)
+    if (reminderSettingsPage) {
+        reminderSettingsPage.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-remindersettings-action]");
+            if (!btn) return;
+
+            const action = btn.dataset.remindersettingsAction;
+            const subId  = btn.dataset.subId;
+            if (!action || !subId) return;
+
+            if (action === "open-sub") {
+                openReminderSettingsPage(false);
+                startEdit(subId);
+            }
+        });
+    }
+
+
     // Reminder-Settings-Panel ein-/ausklappen
     if (reminderSettingsToggle && reminderSettingsPanel) {
         // Start: zugeklappt
@@ -1269,8 +1535,8 @@ function init() {
     }
 
     // Aktionen in der Reminder-Übersicht (open / snooze)
-    if (reminderOverview) {
-        reminderOverview.addEventListener("click", (e) => {
+    if (reminderOverviewList) {
+        reminderOverviewList.addEventListener("click", (e) => {
             const btn = e.target.closest("[data-reminder-action]");
             if (!btn) return;
 
@@ -1290,6 +1556,22 @@ function init() {
             } else if (action === "snooze") {
                 handleReminderSnooze(subId, type);
             }
+        });
+    }
+
+    // Pro-Settings Panel
+    if (proSettingsClose && proSettings) {
+        proSettingsClose.addEventListener("click", () => {
+            openProSettings(false);
+        });
+    }
+
+    if (proEnabledChk) {
+        proEnabledChk.addEventListener("change", () => {
+            isPro = !!proEnabledChk.checked;
+            saveProFlag(isPro);
+            updateProUI();
+            render(); // falls Reminder-Anzeigen wegfallen
         });
     }
 
@@ -1499,6 +1781,8 @@ function init() {
 
     // Startbefüllung Kategorie-Select aus bestehenden Abos
     rebuildCategoryOptions();
+
+    updateProUI();
 }
 
 function initReminderSettingsUI() {
@@ -1536,7 +1820,6 @@ function initReminderSettingsUI() {
 
         reminderTimeInput.addEventListener("change", () => {
             const val = reminderTimeInput.value || "";
-            // simple validation: muss "HH:MM" enthalten
             reminderSettings.timeOfDay =
                 typeof val === "string" && val.includes(":")
                     ? val
@@ -1546,64 +1829,136 @@ function initReminderSettingsUI() {
             saveReminderSettings(reminderSettings);
         });
     }
+
+    if (reminderStyleSelect) {
+        reminderStyleSelect.value =
+            reminderSettings.style || defaultReminderSettings.style;
+
+        reminderStyleSelect.addEventListener("change", () => {
+            const val = reminderStyleSelect.value;
+            if (val === "normal" || val === "silent" || val === "alarm") {
+                reminderSettings.style = val;
+            } else {
+                reminderSettings.style = defaultReminderSettings.style;
+            }
+            reminderStyleSelect.value = reminderSettings.style;
+            saveReminderSettings(reminderSettings);
+        });
+    }
+
+    if (reminderSnoozeDaysInput) {
+        const snoozeVal =
+            reminderSettings.snoozeDays ?? defaultReminderSettings.snoozeDays;
+        reminderSnoozeDaysInput.value = String(snoozeVal);
+
+        reminderSnoozeDaysInput.addEventListener("change", () => {
+            const val = Number(reminderSnoozeDaysInput.value);
+            reminderSettings.snoozeDays =
+                Number.isFinite(val) && val > 0
+                    ? val
+                    : defaultReminderSettings.snoozeDays;
+
+            reminderSnoozeDaysInput.value = String(reminderSettings.snoozeDays);
+            saveReminderSettings(reminderSettings);
+        });
+    }
+    // --- Sound-Auswahl global ----------------------------------
+    if (reminderSoundSelect) {
+        reminderSoundSelect.value = reminderSettings.sound || defaultReminderSettings.sound;
+
+        reminderSoundSelect.addEventListener("change", () => {
+            const v = reminderSoundSelect.value;
+            reminderSettings.sound = (v in SOUND_FILES) ? v : defaultReminderSettings.sound;
+            reminderSoundSelect.value = reminderSettings.sound;
+            saveReminderSettings(reminderSettings);
+        });
+    }
+
+    if (reminderSoundPreviewBtn && reminderSoundPreviewAudio) {
+        reminderSoundPreviewBtn.addEventListener("click", () => {
+            const profile = reminderSettings.sound || defaultReminderSettings.sound;
+            const file = SOUND_FILES[profile];
+
+            // im Browser: wenn wir keine Datei haben, einfach nix tun
+            if (!file) {
+                window.alert("Für dieses Profil gibt es keinen eigenen Ton (Systemstandard / lautlos).");
+                return;
+            }
+
+            reminderSoundPreviewAudio.src = file;
+            reminderSoundPreviewAudio.currentTime = 0;
+            reminderSoundPreviewAudio.play().catch(() => {
+                console.warn("Konnte Vorschau nicht abspielen.");
+            });
+        });
+    }
 }
 
-// Sooze UI
+function playReminderPreview(profile) {
+    // einfache Web-Vorschau TESTVERSION
+    let file = "";
+
+    switch (profile) {
+        case "soft":
+            file = "sounds/reminder-soft.mp3";
+            break;
+        case "alarm":
+            file = "sounds/reminder-alarm.mp3";
+            break;
+        case "silent":
+            // kein Ton
+            return;
+        case "system":
+        default:
+            file = "sounds/reminder-system.mp3";
+            break;
+    }
+
+    const audio = new Audio(file);
+    audio.play().catch(() => {
+        console.warn("Konnte Testton nicht abspielen (evtl. Autoplay blockiert).");
+    });
+}
+
 function handleReminderSnooze(subId, type) {
     const sub = subs.find((s) => s.id === subId);
     if (!sub) return;
 
     currentSnoozeSubId = subId;
-    currentSnoozeType  = type || "billing";
+    currentSnoozeType = type || "billing";
 
-    // aktive Reminder-Zeile hervorheben
-    if (reminderOverview) {
-        reminderOverview
-            .querySelectorAll(".reminderRow--active")
-            .forEach((row) => row.classList.remove("reminderRow--active"));
+    // passende Reminder-Zeile suchen
+    const row = reminderOverviewList.querySelector(
+        `.reminderRow[data-sub-id="${subId}"][data-reminder-type="${type}"]`
+    );
 
-        const rows = reminderOverview.querySelectorAll(".reminderRow");
-        rows.forEach((row) => {
-            if (
-                row.dataset.subId === subId &&
-                (!type || row.dataset.reminderType === type)
-            ) {
-                row.classList.add("reminderRow--active");
-            }
-        });
-    }
+    if (!row) return;
 
+    // Alle vorherigen Snooze-Panels schließen
+    openSnoozePanel(false);
+
+    // Defaults setzen (Datum + Zeit)
     const today = new Date();
-    const defaultDate = formatISODate(addDays(today, 3) || today);
-    if (snoozeDateInput) {
-        snoozeDateInput.value = defaultDate;
-    }
-
-    // Zeit-Default: entweder letzte Snooze-Zeit oder globale Reminder-Uhrzeit
     const state = sub.reminderState || {};
+    const effectiveCfg = getEffectiveReminderConfig(sub);
+    const snoozeDays = effectiveCfg.snoozeDays || reminderSettings.snoozeDays;
+
+    snoozeDateInput.value = formatISODate(addDays(today, snoozeDays));
+
     const fallbackTime =
-        (reminderSettings && reminderSettings.timeOfDay) ||
+        state.snoozedTimeOfDay ||
+        effectiveCfg.timeOfDay ||
+        reminderSettings.timeOfDay ||
         defaultReminderSettings.timeOfDay;
 
-    const lastSnoozeTime =
-        typeof state.snoozedTimeOfDay === "string" &&
-        state.snoozedTimeOfDay.includes(":")
-            ? state.snoozedTimeOfDay
-            : fallbackTime;
+    snoozeTimeInput.value = fallbackTime;
 
-    if (snoozeTimeInput) {
-        snoozeTimeInput.value = lastSnoozeTime;
-    }
+    // Label setzen
+    snoozeLabelEl.textContent =
+        `${sub.name || "Abo"} · ${type === "renewal" ? "Verlängerung" : "Zahlung"}`;
 
-    // Beschriftung (z.B. "Netflix · Zahlung")
-    const name = sub.name || "Abo";
-    const typeLabel = type === "renewal" ? "Verlängerung" : "Zahlung";
-
-    if (snoozeLabelEl) {
-        snoozeLabelEl.textContent = `${name} · ${typeLabel}`;
-    }
-
-    openSnoozePanel(true);
+    // Panel unter der Zeile öffnen
+    openSnoozePanel(true, row);
 }
 
 function handleMenuAction(action) {
@@ -1615,20 +1970,35 @@ function handleMenuAction(action) {
             toggleTheme();
             break;
         case "reminder-overview":
-            openReminderOverview(true);
+            if (isPro) openReminderOverview(true);
+            break;
+        case "reminder-settings":
+            if (isPro) openReminderSettingsPage(true);
+            break;
+        case "pro-settings":
+            openProSettings(true);
             break;
         default:
             break;
     }
 
-    // Nach Aktion Menü schließen
     openMenu(false);
 }
-
 
 // --- Rendering ---------------------------------------------------------------
 function render() {
     let visibleSubs = subs;
+
+    //fälligkeitssortierung durchgehen
+    const today = new Date();
+    const reminderBySubId = new Map();
+
+    subs.forEach((s) => {
+        const evt = getNextReminderForSub(s, today);
+        if (evt) {
+            reminderBySubId.set(s.id, evt);
+        }
+    });
 
     // --- Status-Filter ------------------------------------------------------
     if (statusFilter === "active") {
@@ -1691,6 +2061,18 @@ function render() {
                 return 0;
             }
 
+            if (sortBy === "nextDue") {
+                const evtA = reminderBySubId.get(a.id);
+                const evtB = reminderBySubId.get(b.id);
+
+                const timeA = evtA ? evtA.triggerAt.getTime() : Infinity;
+                const timeB = evtB ? evtB.triggerAt.getTime() : Infinity;
+
+                if (timeA < timeB) return sortDir === "asc" ? -1 : 1;
+                if (timeA > timeB) return sortDir === "asc" ? 1 : -1;
+                return 0;
+            }
+
             // Default-Fallback: Name
             const nameA = (a.name || "").toLowerCase();
             const nameB = (b.name || "").toLowerCase();
@@ -1698,6 +2080,7 @@ function render() {
             if (nameA > nameB) return sortDir === "asc" ? 1 : -1;
             return 0;
         });
+
     }
 
     // --- Liste + Empty-State ------------------------------------------------
@@ -1734,7 +2117,39 @@ function render() {
 
                 // Basis-Zeile: Betrag + Zyklus
                 const baseLine = `${money(s.amount)} · ${cycleLabel}`;
-                const subLine  = statusLabel ? `${statusLabel} · ${baseLine}` : baseLine;
+
+                // optionaler Reminder-Text
+                let dueLabel = "";
+                const evt = reminderBySubId.get(s.id);
+
+                if (evt) {
+                    // nur das Datum vergleichen, Uhrzeit egal
+                    const dateOnlyToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    const dateOnlyEvt   = new Date(
+                        evt.triggerAt.getFullYear(),
+                        evt.triggerAt.getMonth(),
+                        evt.triggerAt.getDate()
+                    );
+
+                    const diffMs   = dateOnlyEvt - dateOnlyToday;
+                    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+                    if (diffDays <= 0) {
+                        dueLabel = "Heute fällig";
+                    } else if (diffDays === 1) {
+                        dueLabel = "Morgen fällig";
+                    } else {
+                        dueLabel = `Fällig in ${diffDays} Tagen`;
+                    }
+                }
+
+                // Teile zusammenbauen: Status · Fälligkeit · Betrag/Zyklus
+                const parts = [];
+                if (statusLabel) parts.push(statusLabel);
+                if (dueLabel)   parts.push(dueLabel);
+                parts.push(baseLine);
+
+                const subLine = parts.join(" · ");
 
                 const isDisabled = rs.state === "scheduled" || rs.state === "ended";
 
@@ -1810,12 +2225,16 @@ function onSubmit(e) {
     const active = !!activeChk.checked;
 
     // --- Reminder-Formwerte einsammeln -------------------------------------
-    let reminderMode = "default";
-    let customBillingDays = null;
-    let customRenewalDays = null;
+    let reminderMode       = "default";
+    let customBillingDays  = null;
+    let customRenewalDays  = null;
+    let customTimeOfDay    = null;
+    let customStyle        = null;
+    let customSnoozeDays   = null;
 
     if (reminderModeSelect) {
         reminderMode = reminderModeSelect.value || "default";
+        updateReminderModeUI();
     }
 
     if (reminderMode === "custom") {
@@ -1831,6 +2250,18 @@ function onSubmit(e) {
                 customRenewalDays = v;
             }
         }
+        if (reminderTimeCustomInput && reminderTimeCustomInput.value) {
+            customTimeOfDay = reminderTimeCustomInput.value;
+        }
+        if (reminderStyleCustomInput && reminderStyleCustomInput.value) {
+            customStyle = reminderStyleCustomInput.value;
+        }
+        if (reminderSnoozeCustomInput && reminderSnoozeCustomInput.value) {
+            const v = Number(reminderSnoozeCustomInput.value);
+            if (Number.isFinite(v) && v > 0) {
+                customSnoozeDays = v;
+            }
+        }
     }
 
     if (!name || !isFinite(amount) || amount <= 0) {
@@ -1840,9 +2271,11 @@ function onSubmit(e) {
     const newReminderConfig = {
         mode: reminderMode,              // "default" | "custom" | "off"
         billingLeadDays: customBillingDays,
-        renewalLeadDays: customRenewalDays
+        renewalLeadDays: customRenewalDays,
+        timeOfDay: customTimeOfDay,
+        style: customStyle,
+        snoozeDays: customSnoozeDays
     };
-
 
     if (!name || !isFinite(amount) || amount <= 0) {
         return;
@@ -2021,20 +2454,33 @@ function startEdit(id) {
 
     // --- Reminder-Formular mit Abo-spezifischen Einstellungen befüllen -----
     const cfg = s.reminderConfig || {};
-
     if (reminderModeSelect) {
         const mode = (cfg.mode === "custom" || cfg.mode === "off") ? cfg.mode : "default";
         reminderModeSelect.value = mode;
     }
-
     if (reminderBillingCustomInput) {
         reminderBillingCustomInput.value =
             typeof cfg.billingLeadDays === "number" ? String(cfg.billingLeadDays) : "";
     }
-
     if (reminderRenewalCustomInput) {
         reminderRenewalCustomInput.value =
             typeof cfg.renewalLeadDays === "number" ? String(cfg.renewalLeadDays) : "";
+    }
+    if (reminderTimeCustomInput) {
+        reminderTimeCustomInput.value =
+            typeof cfg.timeOfDay === "string" && cfg.timeOfDay.includes(":")
+                ? cfg.timeOfDay
+                : "";
+    }
+    if (reminderStyleCustomInput) {
+        reminderStyleCustomInput.value =
+            typeof cfg.style === "string" ? cfg.style : "";
+    }
+    if (reminderSnoozeCustomInput) {
+        reminderSnoozeCustomInput.value =
+            typeof cfg.snoozeDays === "number" && cfg.snoozeDays > 0
+                ? String(cfg.snoozeDays)
+                : "";
     }
 
     updateReminderModeUI();
@@ -2064,12 +2510,13 @@ function resetForm() {
     if (reminderModeSelect) {
         reminderModeSelect.value = "default";
     }
-    if (reminderBillingCustomInput) {
-        reminderBillingCustomInput.value = "";
-    }
-    if (reminderRenewalCustomInput) {
-        reminderRenewalCustomInput.value = "";
-    }
+    if (reminderBillingCustomInput) reminderBillingCustomInput.value = "";
+    if (reminderRenewalCustomInput) reminderRenewalCustomInput.value = "";
+    if (reminderTimeCustomInput)    reminderTimeCustomInput.value    = "";
+    if (reminderStyleCustomInput)   reminderStyleCustomInput.value   = "";
+    if (reminderSnoozeCustomInput)  reminderSnoozeCustomInput.value  = "";
+    updateReminderModeUI();
+
     updateReminderModeUI();
     setFormMode("new");
 }
@@ -2130,6 +2577,12 @@ function openMenu(open) {
     }
 }
 
+function openProSettings(open) {
+    if (!proSettings) return;
+    const isOpen = !!open;
+    proSettings.classList.toggle("panel--open", isOpen);
+}
+
 // --- Helpers -----------------------------------------------------------------
 //Sortierungsaktualisierung
 function updateSortDirButtonIcon() {
@@ -2162,31 +2615,56 @@ function updateReminderSettingsToggleLabel(isOpen) {
  * abhängig vom gewählten reminderMode.
  */
 function updateReminderModeUI() {
-    if (!reminderModeSelect || !reminderCustomWrapper) {
+    if (!reminderModeSelect) return;
+
+    const mode = reminderModeSelect.value || "default";
+    const isCustom = mode === "custom";
+    const isOff    = mode === "off";
+
+    // Custom-Felder nur bei "custom"
+    if (reminderCustomWrapper) {
+        reminderCustomWrapper.style.display = isCustom ? "block" : "none";
+    }
+
+    // Time / Style / Snooze nur bei "custom"
+    const wrappers = [
+        reminderTimeWrapper,
+        reminderStyleWrapper,
+        reminderSnoozeWrapper
+    ];
+
+    wrappers.forEach((wrapper) => {
+        if (!wrapper) return;
+        wrapper.classList.toggle("hidden", !isCustom);
+    });
+
+    const disable = !isCustom || isOff;
+
+    if (reminderTimeCustomInput)    reminderTimeCustomInput.disabled    = disable;
+    if (reminderStyleCustomInput)   reminderStyleCustomInput.disabled   = disable;
+    if (reminderSnoozeCustomInput)  reminderSnoozeCustomInput.disabled  = disable;
+    if (reminderBillingCustomInput) reminderBillingCustomInput.disabled = disable;
+    if (reminderRenewalCustomInput) reminderRenewalCustomInput.disabled = disable;
+}
+
+function openSnoozePanel(open, anchorRow = null) {
+    if (!reminderSnoozePanel) return;
+
+    if (!open) {
+        reminderSnoozePanel.remove();
+        currentSnoozeSubId = null;
+        currentSnoozeType = null;
         return;
     }
 
-    const mode = reminderModeSelect.value || "default";
-    const showCustom = mode === "custom";
+    // Panel in die Übersicht (falls ausgelagert)
+    reminderOverviewList.appendChild(reminderSnoozePanel);
+    reminderSnoozePanel.classList.add("snoozePanel--open");
 
-    reminderCustomWrapper.style.display = showCustom ? "block" : "none";
-}
-
-function openSnoozePanel(open) {
-    if (!reminderSnoozePanel) return;
-    const isOpen = !!open;
-    reminderSnoozePanel.classList.toggle("snoozePanel--open", isOpen);
-
-    if (!isOpen) {
-        currentSnoozeSubId = null;
-        currentSnoozeType = null;
-        if (snoozeDateInput) snoozeDateInput.value = "";
-        if (snoozeTimeInput) snoozeTimeInput.value = "";
-        if (reminderOverview) {
-            reminderOverview
-                .querySelectorAll(".reminderRow--active")
-                .forEach((row) => row.classList.remove("reminderRow--active"));
-        }
+    // Falls eine Zeile angegeben ist → Panel direkt DARUNTER einfügen
+    if (anchorRow) {
+        anchorRow.insertAdjacentElement("afterend", reminderSnoozePanel);
+        anchorRow.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 }
 
@@ -2232,6 +2710,18 @@ function applySnoozeFromDateStr(dateStr) {
     openSnoozePanel(false);
 }
 
+function updateProUI() {
+    // Alle Elemente, die nur im Pro-Modus sichtbar sein sollen
+    const proElems = document.querySelectorAll("[data-pro-only='1']");
+    proElems.forEach((el) => {
+        el.classList.toggle("hidden", !isPro);
+    });
+
+    // Checkbox im Pro-Panel syncen
+    if (proEnabledChk) {
+        proEnabledChk.checked = !!isPro;
+    }
+}
 
 function escapeHTML(str) {
 return String(str)
